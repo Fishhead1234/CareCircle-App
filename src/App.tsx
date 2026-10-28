@@ -10,8 +10,11 @@ import {
   HeartHandshake,
   Globe,
   Coins,
+  Cloud,
+  RefreshCw,
 } from 'lucide-react';
 import { useCareStore, AppTab } from './store/careStore';
+import { saveSupabaseConfig, getSupabaseConfig } from './services/supabaseSyncService';
 import { FamilyHubScreen } from './screens/Hub/FamilyHubScreen';
 import { FundsPoolScreen } from './screens/Funds/FundsPoolScreen';
 import { CaregiverAndMedsScreen } from './screens/CareLog/CaregiverAndMedsScreen';
@@ -33,6 +36,10 @@ export const App: React.FC = () => {
     setLanguage,
     currencyCode,
     setCurrency,
+    roomCode,
+    syncStatus,
+    connectCloudRoom,
+    pullFromCloudRoom,
     t,
   } = useCareStore();
   const [isScannerOpen, setIsScannerOpen] = useState(false);
@@ -45,6 +52,57 @@ export const App: React.FC = () => {
       root.classList.remove('dark');
     }
   }, [themeMode]);
+
+  // Auto-join room from URL query params (?room=CODE&sbUrl=...&sbKey=...)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const urlRoom = params.get('room');
+    const urlSbUrl = params.get('sbUrl');
+    const urlSbKey = params.get('sbKey');
+
+    if (urlSbUrl && urlSbKey) {
+      const current = getSupabaseConfig();
+      saveSupabaseConfig(urlSbUrl || current.url, urlSbKey || current.anonKey);
+    }
+
+    if (urlRoom) {
+      connectCloudRoom(urlRoom);
+      // Clean sensitive params from URL bar while keeping app state
+      const cleanUrl = window.location.pathname;
+      window.history.replaceState({}, '', cleanUrl);
+    } else if (roomCode) {
+      pullFromCloudRoom(true);
+    }
+  }, []);
+
+  // Continuous background auto-sync every 8 seconds & on window focus
+  useEffect(() => {
+    if (!roomCode) return;
+
+    const interval = setInterval(() => {
+      pullFromCloudRoom(true);
+    }, 8000);
+
+    const handleFocus = () => {
+      pullFromCloudRoom(true);
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        pullFromCloudRoom(true);
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [roomCode, pullFromCloudRoom]);
 
   const navItems: { id: AppTab; label: string; icon: React.ReactNode }[] = [
     {
@@ -89,6 +147,39 @@ export const App: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
+            {/* Live Cloud Room Status Pill */}
+            <button
+              type="button"
+              onClick={() => {
+                if (roomCode) {
+                  pullFromCloudRoom(false);
+                } else {
+                  setActiveTab('settings');
+                }
+              }}
+              title={
+                roomCode
+                  ? `Connected to Family Room: ${roomCode} (Tap to sync now)`
+                  : 'Set up Family Room Auto-Sync'
+              }
+              className={`flex items-center gap-1 px-2 py-1.5 rounded-xl border text-[11px] font-extrabold cursor-pointer transition ${
+                roomCode
+                  ? syncStatus === 'error'
+                    ? 'bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-400'
+                    : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
+                  : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+              }`}
+            >
+              {syncStatus === 'syncing' ? (
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-teal-600" />
+              ) : (
+                <Cloud className="w-3.5 h-3.5" />
+              )}
+              <span className="max-w-[78px] truncate">
+                {roomCode ? roomCode : 'Room'}
+              </span>
+            </button>
+
             {/* Currency Dropdown Pill */}
             <div className="relative flex items-center bg-slate-100 dark:bg-slate-800 rounded-xl px-2 py-1.5 border border-slate-200 dark:border-slate-700">
               <Coins className="w-3.5 h-3.5 text-amber-500 mr-1 shrink-0" />

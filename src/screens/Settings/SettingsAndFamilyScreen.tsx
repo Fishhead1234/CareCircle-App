@@ -14,9 +14,19 @@ import {
   Globe,
   Coins,
   Lock,
+  Cloud,
+  Copy,
+  Database,
+  Link2,
 } from 'lucide-react';
 import { useCareStore } from '../../store/careStore';
 import { pdfReportService } from '../../services/pdfReportService';
+import {
+  getSupabaseConfig,
+  saveSupabaseConfig,
+  isSupabaseReady,
+  SUPABASE_SQL_SCHEMA,
+} from '../../services/supabaseSyncService';
 import {
   SUPPORTED_LANGUAGES,
   SUPPORTED_CURRENCIES,
@@ -43,6 +53,14 @@ export const SettingsAndFamilyScreen: React.FC = () => {
     removeFamilyMember,
     equalizeSplits,
     getMemberBalances,
+    roomCode,
+    syncStatus,
+    lastSyncedAt,
+    syncError,
+    connectCloudRoom,
+    disconnectCloudRoom,
+    pullFromCloudRoom,
+    pushToCloudRoom,
     exportSyncJson,
     importSyncJson,
     resetToDemoData,
@@ -54,6 +72,14 @@ export const SettingsAndFamilyScreen: React.FC = () => {
   // Add Member
   const [newMemberName, setNewMemberName] = useState('');
   const [newMemberRelation, setNewMemberRelation] = useState('');
+
+  // Supabase Family Room Live Sync
+  const initialSb = getSupabaseConfig();
+  const [sbUrlInput, setSbUrlInput] = useState(initialSb.url);
+  const [sbKeyInput, setSbKeyInput] = useState(initialSb.anonKey);
+  const [roomCodeInput, setRoomCodeInput] = useState(roomCode || 'FAN-FAMILY');
+  const [showSbCredentials, setShowSbCredentials] = useState(!isSupabaseReady());
+  const [showSqlModal, setShowSqlModal] = useState(false);
 
   // Sync (.json file export & import)
   const syncFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -142,6 +168,54 @@ export const SettingsAndFamilyScreen: React.FC = () => {
     };
     reader.readAsText(file);
     e.target.value = '';
+  };
+
+  const handleConnectRoom = async (e: React.FormEvent) => {
+    e.preventDefault();
+    saveSupabaseConfig(sbUrlInput, sbKeyInput);
+    const res = await connectCloudRoom(roomCodeInput);
+    setBannerMsg(res.message);
+    if (res.needsTableSetup) {
+      setShowSqlModal(true);
+    }
+    if (res.success) {
+      setShowSbCredentials(false);
+    }
+    setTimeout(() => setBannerMsg(null), 4500);
+  };
+
+  const handleCopyFamilyInviteLink = async () => {
+    const { url, anonKey } = getSupabaseConfig();
+    const activeRoom = roomCode || roomCodeInput.trim().toUpperCase();
+    const baseUrl = window.location.origin + window.location.pathname;
+    const params = new URLSearchParams();
+    params.set('room', activeRoom);
+    if (url && anonKey) {
+      params.set('sbUrl', url);
+      params.set('sbKey', anonKey);
+    }
+    const shareUrl = `${baseUrl}?${params.toString()}`;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setBannerMsg(
+        language === 'zh-TW'
+          ? `✓ 已複製家庭自動同步連結（房間：${activeRoom}）！傳給家人點開即可自動連線同步`
+          : `✓ Copied Family Auto-Sync Invite Link for Room "${activeRoom}"!`
+      );
+    } catch {
+      setBannerMsg('✓ Link ready');
+    }
+    setTimeout(() => setBannerMsg(null), 4000);
+  };
+
+  const handleCopySqlScript = async () => {
+    try {
+      await navigator.clipboard.writeText(SUPABASE_SQL_SCHEMA);
+      setBannerMsg('✓ Copied SQL setup script! Paste into Supabase SQL Editor & click Run.');
+    } catch {
+      setBannerMsg('✓ SQL script ready');
+    }
+    setTimeout(() => setBannerMsg(null), 4000);
   };
 
   const handleVersionTap = () => {
@@ -421,7 +495,200 @@ export const SettingsAndFamilyScreen: React.FC = () => {
         </div>
       </div>
 
-      {/* 5. Family Sync (.json Export & Import) & Demo Reset */}
+      {/* 5. Supabase Real-Time Family Room Cloud Sync */}
+      <div className="rounded-3xl bg-white dark:bg-slate-900 border-2 border-teal-500/30 dark:border-teal-500/30 p-4 shadow-sm space-y-3.5">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-1.5">
+              <Cloud className="w-4 h-4 text-teal-600" />
+              <span>
+                {language === 'zh-TW'
+                  ? 'Supabase 家庭房間即時雲端同步 (Family Room Sync)'
+                  : 'Supabase Family Room Auto-Sync'}
+              </span>
+            </h3>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+              {language === 'zh-TW'
+                ? '輸入相同的「家庭房間碼」（例如 FAN-FAMILY），所有手機與網頁就會自動即時同步最新帳單與基金紀錄。'
+                : 'All devices using the same Family Room Code automatically stay in sync in real time via Supabase.'}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowSbCredentials(!showSbCredentials)}
+            className="px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-[11px] font-bold text-slate-600 dark:text-slate-300 cursor-pointer shrink-0 flex items-center gap-1"
+          >
+            <Database className="w-3.5 h-3.5 text-teal-600" />
+            <span>{language === 'zh-TW' ? 'Supabase 設定' : 'Supabase Keys'}</span>
+          </button>
+        </div>
+
+        {/* Active Room Status Banner */}
+        {roomCode && (
+          <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <div className="text-xs font-extrabold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span>
+                  {language === 'zh-TW'
+                    ? `自動雲端同步中 • 房間碼：${roomCode}`
+                    : `Auto-Sync Active • Room: ${roomCode}`}
+                </span>
+              </div>
+              {lastSyncedAt && (
+                <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">
+                  {language === 'zh-TW' ? '最後同步：' : 'Last synced: '}
+                  {new Date(lastSyncedAt).toLocaleTimeString()}
+                </div>
+              )}
+              {syncError && (
+                <div className="text-[11px] text-rose-600 dark:text-rose-400 font-semibold mt-0.5">
+                  {syncError}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={async () => {
+                  await pullFromCloudRoom(false);
+                  await pushToCloudRoom();
+                  setBannerMsg(
+                    language === 'zh-TW' ? '✓ 已與雲端完成雙向同步！' : '✓ Cloud room synced!'
+                  );
+                  setTimeout(() => setBannerMsg(null), 2500);
+                }}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs cursor-pointer"
+              >
+                <RefreshCw
+                  className={`w-3.5 h-3.5 ${syncStatus === 'syncing' ? 'animate-spin' : ''}`}
+                />
+                <span>{language === 'zh-TW' ? '立即同步' : 'Sync Now'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleCopyFamilyInviteLink}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs cursor-pointer"
+              >
+                <Link2 className="w-3.5 h-3.5" />
+                <span>{language === 'zh-TW' ? '複製家人邀請連結' : 'Copy Invite Link'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={disconnectCloudRoom}
+                className="px-2.5 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 text-[11px] font-bold text-slate-600 dark:text-slate-400 cursor-pointer"
+              >
+                {language === 'zh-TW' ? '中斷' : 'Leave'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Collapsible Supabase URL & Anon Key Setup */}
+        {showSbCredentials && (
+          <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-extrabold text-slate-700 dark:text-slate-200">
+                Supabase Project URL & Publishable / Anon Key
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowSqlModal(!showSqlModal)}
+                className="text-[11px] font-bold text-teal-600 dark:text-teal-400 underline cursor-pointer"
+              >
+                {showSqlModal ? 'Hide SQL Script' : 'View / Copy SQL Table Script'}
+              </button>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 mb-1">
+                Supabase Project URL
+              </label>
+              <input
+                type="url"
+                value={sbUrlInput}
+                onChange={(e) => setSbUrlInput(e.target.value)}
+                placeholder="https://your-project-id.supabase.co"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono text-slate-900 dark:text-white"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 mb-1">
+                Supabase Anon / Publishable Key
+              </label>
+              <input
+                type="password"
+                value={sbKeyInput}
+                onChange={(e) => setSbKeyInput(e.target.value)}
+                placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6... or sb_publishable_..."
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono text-slate-900 dark:text-white"
+              />
+            </div>
+
+            {showSqlModal && (
+              <div className="p-3 rounded-xl bg-slate-900 text-slate-100 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-teal-300">
+                    Supabase SQL Editor Setup (Optional — also auto-works with existing projects)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleCopySqlScript}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-teal-500 text-slate-950 font-bold text-[11px] cursor-pointer"
+                  >
+                    <Copy className="w-3 h-3" />
+                    <span>Copy SQL</span>
+                  </button>
+                </div>
+                <pre className="text-[10px] font-mono overflow-x-auto text-slate-300 max-h-36">
+                  {SUPABASE_SQL_SCHEMA}
+                </pre>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Family Room Code Form */}
+        <form onSubmit={handleConnectRoom} className="flex flex-wrap sm:flex-nowrap items-center gap-2">
+          <div className="flex-1 min-w-[180px]">
+            <input
+              type="text"
+              required
+              value={roomCodeInput}
+              onChange={(e) => setRoomCodeInput(e.target.value.toUpperCase())}
+              placeholder={
+                language === 'zh-TW'
+                  ? '輸入家庭房間碼（例如：FAN-FAMILY）'
+                  : 'Enter Family Room Code (e.g. FAN-FAMILY)'
+              }
+              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-mono font-extrabold uppercase tracking-wider text-slate-900 dark:text-white"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={syncStatus === 'syncing'}
+            className="px-4 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-extrabold text-xs cursor-pointer shadow-sm shrink-0 flex items-center gap-1.5"
+          >
+            <Cloud className="w-4 h-4" />
+            <span>
+              {language === 'zh-TW'
+                ? roomCode
+                  ? '切換 / 重新同步房間碼'
+                  : '連線並開啟自動雲端同步'
+                : roomCode
+                ? 'Update / Sync Room Code'
+                : 'Connect Family Room'}
+            </span>
+          </button>
+        </form>
+      </div>
+
+      {/* 6. Family Sync (.json Export & Import) & Demo Reset */}
       <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4 shadow-sm space-y-3">
         <div>
           <h3 className="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-1.5">

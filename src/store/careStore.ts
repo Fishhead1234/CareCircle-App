@@ -11,8 +11,15 @@ import {
   SuggestedSettlement,
 } from '../types/care';
 import { AppLanguage, TRANSLATIONS, SUPPORTED_CURRENCIES } from '../i18n/translations';
+import {
+  supabaseSyncService,
+  normalizeRoomCode,
+  isSupabaseReady,
+  CloudLedgerPayload,
+} from '../services/supabaseSyncService';
 
 export type AppTab = 'hub' | 'funds' | 'carelog' | 'settings';
+export type CloudSyncStatus = 'idle' | 'syncing' | 'synced' | 'error';
 
 export const ADMIN_PASSCODES = ['admin888', 'invest2026'];
 
@@ -34,6 +41,13 @@ interface CareStoreState {
   isPro: boolean;
   isAdmin: boolean;
   trialStartDate: string;
+
+  // Supabase Family Room Sync
+  roomCode: string;
+  syncStatus: CloudSyncStatus;
+  lastSyncedAt: string | null;
+  syncError: string | null;
+  deletedIds: string[];
 
   recipient: CareRecipientProfile;
   members: FamilyMember[];
@@ -83,7 +97,13 @@ interface CareStoreState {
   getMemberBalances: () => MemberBalanceSummary[];
   getSuggestedSettlements: () => SuggestedSettlement[];
 
-  // Sync / Backup
+  // Sync / Backup & Supabase Cloud Room
+  connectCloudRoom: (
+    roomCode: string
+  ) => Promise<{ success: boolean; message: string; needsTableSetup?: boolean }>;
+  disconnectCloudRoom: () => void;
+  pullFromCloudRoom: (silent?: boolean) => Promise<void>;
+  pushToCloudRoom: () => Promise<void>;
   exportSyncJson: () => string;
   importSyncJson: (
     rawJson: string,
@@ -715,8 +735,9 @@ export const useCareStore = create<CareStoreState>((set, get) => {
   const saved = loadInitialState();
   const initialLang: AppLanguage = saved?.language || 'zh-TW';
   const initialDemo = getDemoDataset(initialLang);
+  let cloudPushTimer: ReturnType<typeof setTimeout> | null = null;
 
-  const persist = () => {
+  const saveLocalOnly = () => {
     try {
       const s = get();
       const payload = JSON.stringify({
@@ -728,6 +749,9 @@ export const useCareStore = create<CareStoreState>((set, get) => {
         isPro: s.isPro,
         isAdmin: s.isAdmin,
         trialStartDate: s.trialStartDate,
+        roomCode: s.roomCode,
+        lastSyncedAt: s.lastSyncedAt,
+        deletedIds: s.deletedIds,
         recipient: s.recipient,
         members: s.members,
         fundContributions: s.fundContributions,
@@ -743,6 +767,17 @@ export const useCareStore = create<CareStoreState>((set, get) => {
     }
   };
 
+  const persist = () => {
+    saveLocalOnly();
+    const s = get();
+    if (s.roomCode && isSupabaseReady()) {
+      if (cloudPushTimer) clearTimeout(cloudPushTimer);
+      cloudPushTimer = setTimeout(() => {
+        get().pushToCloudRoom();
+      }, 500);
+    }
+  };
+
   return {
     activeTab: 'hub',
     language: initialLang,
@@ -753,6 +788,12 @@ export const useCareStore = create<CareStoreState>((set, get) => {
     isPro: saved?.isPro ?? true,
     isAdmin: saved?.isAdmin ?? false,
     trialStartDate: saved?.trialStartDate || new Date().toISOString(),
+
+    roomCode: saved?.roomCode || '',
+    syncStatus: saved?.roomCode && isSupabaseReady() ? 'synced' : 'idle',
+    lastSyncedAt: saved?.lastSyncedAt || null,
+    syncError: null,
+    deletedIds: Array.isArray(saved?.deletedIds) ? saved.deletedIds : [],
 
     recipient: saved?.recipient || initialDemo.recipient,
     members: Array.isArray(saved?.members) ? saved.members : initialDemo.members,
@@ -837,7 +878,10 @@ export const useCareStore = create<CareStoreState>((set, get) => {
       set((state) => {
         if (state.members.length <= 1) return state;
         const remaining = state.members.filter((m) => m.id !== id);
-        return { members: remaining };
+        return {
+          members: remaining,
+          deletedIds: Array.from(new Set([...state.deletedIds, id])),
+        };
       });
       persist();
     },
@@ -872,6 +916,7 @@ export const useCareStore = create<CareStoreState>((set, get) => {
     deleteFundContribution: (id) => {
       set((state) => ({
         fundContributions: state.fundContributions.filter((fc) => fc.id !== id),
+        deletedIds: Array.from(new Set([...state.deletedIds, id])),
       }));
       persist();
     },
@@ -896,6 +941,7 @@ export const useCareStore = create<CareStoreState>((set, get) => {
     deleteExpense: (id) => {
       set((state) => ({
         expenses: state.expenses.filter((e) => e.id !== id),
+        deletedIds: Array.from(new Set([...state.deletedIds, id])),
       }));
       persist();
     },
@@ -914,6 +960,7 @@ export const useCareStore = create<CareStoreState>((set, get) => {
     deleteSettlement: (id) => {
       set((state) => ({
         settlements: state.settlements.filter((s) => s.id !== id),
+        deletedIds: Array.from(new Set([...state.deletedIds, id])),
       }));
       persist();
     },
@@ -966,6 +1013,7 @@ export const useCareStore = create<CareStoreState>((set, get) => {
     deleteCaregiverShift: (id) => {
       set((state) => ({
         shifts: state.shifts.filter((sh) => sh.id !== id),
+        deletedIds: Array.from(new Set([...state.deletedIds, id])),
       }));
       persist();
     },
@@ -1012,6 +1060,7 @@ export const useCareStore = create<CareStoreState>((set, get) => {
     deleteMedication: (id) => {
       set((state) => ({
         medications: state.medications.filter((m) => m.id !== id),
+        deletedIds: Array.from(new Set([...state.deletedIds, id])),
       }));
       persist();
     },
@@ -1177,6 +1226,335 @@ export const useCareStore = create<CareStoreState>((set, get) => {
       }
 
       return suggestions;
+    },
+
+    connectCloudRoom: async (rawCode) => {
+      const cleanCode = normalizeRoomCode(rawCode);
+      if (!cleanCode) {
+        return { success: false, message: 'Please enter a Family Room Code (e.g. FAN-FAMILY).' };
+      }
+
+      if (!isSupabaseReady()) {
+        return {
+          success: false,
+          message: 'Please enter your Supabase Project URL and Anon Key first.',
+        };
+      }
+
+      set({ syncStatus: 'syncing', syncError: null });
+
+      const fetchRes = await supabaseSyncService.fetchRoom(cleanCode);
+      if (fetchRes.error) {
+        set({ syncStatus: 'error', syncError: fetchRes.error });
+        return {
+          success: false,
+          message: fetchRes.error,
+          needsTableSetup: fetchRes.needsTableSetup,
+        };
+      }
+
+      const s = get();
+      // If the room doesn't exist yet on Supabase, create it with the current device's data
+      if (!fetchRes.found || !fetchRes.record?.ledger_json) {
+        const payload: CloudLedgerPayload = {
+          app: 'CareCircle',
+          version: '1.3.0',
+          updatedAt: new Date().toISOString(),
+          language: s.language,
+          currencyCode: s.currencyCode,
+          currencySymbol: s.currencySymbol,
+          recipient: s.recipient,
+          members: s.members,
+          fundContributions: s.fundContributions,
+          expenses: s.expenses,
+          settlements: s.settlements,
+          shifts: s.shifts,
+          medications: s.medications,
+          deletedIds: s.deletedIds,
+        };
+
+        const upRes = await supabaseSyncService.upsertRoom(
+          cleanCode,
+          s.recipient.name || 'Family Care Hub',
+          payload
+        );
+
+        if (!upRes.success) {
+          set({ syncStatus: 'error', syncError: upRes.error || 'Failed to create cloud room.' });
+          return {
+            success: false,
+            message: upRes.error || 'Failed to create cloud room.',
+            needsTableSetup: upRes.needsTableSetup,
+          };
+        }
+
+        set({
+          roomCode: cleanCode,
+          syncStatus: 'synced',
+          lastSyncedAt: upRes.updatedAt || new Date().toISOString(),
+          syncError: null,
+        });
+        saveLocalOnly();
+
+        return {
+          success: true,
+          message: `✓ Created & synced Family Room "${cleanCode}" (${s.expenses.length} bills uploaded)`,
+        };
+      }
+
+      // Room exists on Supabase -> Smart Merge cloud and local data
+      const cloud = fetchRes.record.ledger_json;
+      const localIsDemo = isDefaultDemoData(s);
+      const cloudIsDemo = isDefaultDemoData(cloud);
+
+      const allDeleted = new Set<string>([
+        ...(Array.isArray(s.deletedIds) ? s.deletedIds : []),
+        ...(Array.isArray(cloud.deletedIds) ? cloud.deletedIds : []),
+      ]);
+
+      const mergeList = <T extends { id: string }>(localArr: T[], cloudArr: T[]): T[] => {
+        const map = new Map<string, T>();
+        localArr.forEach((item) => {
+          if (!allDeleted.has(item.id)) map.set(item.id, item);
+        });
+        cloudArr.forEach((item) => {
+          if (!allDeleted.has(item.id)) map.set(item.id, item);
+        });
+        return Array.from(map.values());
+      };
+
+      let nextRecipient = s.recipient;
+      let nextMembers = s.members;
+      let nextFunds = s.fundContributions;
+      let nextExpenses = s.expenses;
+      let nextSettlements = s.settlements;
+      let nextShifts = s.shifts;
+      let nextMeds = s.medications;
+      let nextCurrencyCode = s.currencyCode;
+      let nextCurrencySymbol = s.currencySymbol;
+
+      if (localIsDemo && !cloudIsDemo) {
+        // New device joining existing family room: replace local demo data with cloud real data
+        nextRecipient = cloud.recipient || s.recipient;
+        nextMembers = Array.isArray(cloud.members) ? cloud.members : s.members;
+        nextFunds = Array.isArray(cloud.fundContributions) ? cloud.fundContributions : [];
+        nextExpenses = Array.isArray(cloud.expenses) ? cloud.expenses : [];
+        nextSettlements = Array.isArray(cloud.settlements) ? cloud.settlements : [];
+        nextShifts = Array.isArray(cloud.shifts) ? cloud.shifts : [];
+        nextMeds = Array.isArray(cloud.medications) ? cloud.medications : [];
+        if (cloud.currencyCode) nextCurrencyCode = cloud.currencyCode;
+        if (cloud.currencySymbol) nextCurrencySymbol = cloud.currencySymbol;
+      } else if (!localIsDemo && cloudIsDemo) {
+        // Local has real customized data and cloud only had demo data: keep local real data
+      } else {
+        // Both have real data: smart merge both
+        nextRecipient = cloud.recipient || s.recipient;
+        nextMembers = mergeList(s.members, Array.isArray(cloud.members) ? cloud.members : []);
+        nextFunds = mergeList(
+          s.fundContributions,
+          Array.isArray(cloud.fundContributions) ? cloud.fundContributions : []
+        );
+        nextExpenses = mergeList(s.expenses, Array.isArray(cloud.expenses) ? cloud.expenses : []);
+        nextSettlements = mergeList(
+          s.settlements,
+          Array.isArray(cloud.settlements) ? cloud.settlements : []
+        );
+        nextShifts = mergeList(s.shifts, Array.isArray(cloud.shifts) ? cloud.shifts : []);
+        nextMeds = mergeList(
+          s.medications,
+          Array.isArray(cloud.medications) ? cloud.medications : []
+        );
+        if (cloud.currencyCode && s.currencyCode === 'USD') {
+          nextCurrencyCode = cloud.currencyCode;
+          nextCurrencySymbol = cloud.currencySymbol || s.currencySymbol;
+        }
+      }
+
+      const mergedDeletedIds = Array.from(allDeleted);
+
+      set({
+        roomCode: cleanCode,
+        recipient: nextRecipient,
+        members: nextMembers,
+        fundContributions: nextFunds,
+        expenses: nextExpenses,
+        settlements: nextSettlements,
+        shifts: nextShifts,
+        medications: nextMeds,
+        currencyCode: nextCurrencyCode,
+        currencySymbol: nextCurrencySymbol,
+        deletedIds: mergedDeletedIds,
+        syncStatus: 'synced',
+        lastSyncedAt: fetchRes.record.updated_at || new Date().toISOString(),
+        syncError: null,
+      });
+      saveLocalOnly();
+
+      // Push merged state back to cloud so all devices share the unified state
+      await get().pushToCloudRoom();
+
+      return {
+        success: true,
+        message: `✓ Connected to Room "${cleanCode}" (${nextExpenses.length} bills synced)`,
+      };
+    },
+
+    disconnectCloudRoom: () => {
+      set({
+        roomCode: '',
+        syncStatus: 'idle',
+        syncError: null,
+      });
+      saveLocalOnly();
+    },
+
+    pullFromCloudRoom: async (silent = true) => {
+      const s = get();
+      if (!s.roomCode || !isSupabaseReady()) return;
+
+      if (!silent) {
+        set({ syncStatus: 'syncing', syncError: null });
+      }
+
+      const fetchRes = await supabaseSyncService.fetchRoom(s.roomCode);
+      if (fetchRes.error || !fetchRes.found || !fetchRes.record?.ledger_json) {
+        if (!silent && fetchRes.error) {
+          set({ syncStatus: 'error', syncError: fetchRes.error });
+        }
+        return;
+      }
+
+      const cloud = fetchRes.record.ledger_json;
+      const cloudUpdatedAt = fetchRes.record.updated_at;
+
+      // Skip if nothing changed since last sync and silent
+      if (silent && s.lastSyncedAt && cloudUpdatedAt === s.lastSyncedAt) {
+        return;
+      }
+
+      const localIsDemo = isDefaultDemoData(s);
+      const cloudIsDemo = isDefaultDemoData(cloud);
+
+      const allDeleted = new Set<string>([
+        ...(Array.isArray(s.deletedIds) ? s.deletedIds : []),
+        ...(Array.isArray(cloud.deletedIds) ? cloud.deletedIds : []),
+      ]);
+
+      const mergeCloudFirst = <T extends { id: string }>(localArr: T[], cloudArr: T[]): T[] => {
+        const map = new Map<string, T>();
+        localArr.forEach((item) => {
+          if (!allDeleted.has(item.id)) map.set(item.id, item);
+        });
+        // Cloud entries overwrite same ID so edits from other devices take effect
+        cloudArr.forEach((item) => {
+          if (!allDeleted.has(item.id)) map.set(item.id, item);
+        });
+        return Array.from(map.values());
+      };
+
+      if (!localIsDemo && cloudIsDemo) {
+        return;
+      }
+
+      const nextExpenses =
+        localIsDemo && !cloudIsDemo
+          ? (Array.isArray(cloud.expenses) ? cloud.expenses : [])
+          : mergeCloudFirst(s.expenses, Array.isArray(cloud.expenses) ? cloud.expenses : []);
+
+      const nextFunds =
+        localIsDemo && !cloudIsDemo
+          ? (Array.isArray(cloud.fundContributions) ? cloud.fundContributions : [])
+          : mergeCloudFirst(
+              s.fundContributions,
+              Array.isArray(cloud.fundContributions) ? cloud.fundContributions : []
+            );
+
+      const nextMembers =
+        localIsDemo && !cloudIsDemo
+          ? (Array.isArray(cloud.members) ? cloud.members : s.members)
+          : mergeCloudFirst(s.members, Array.isArray(cloud.members) ? cloud.members : []);
+
+      const nextShifts =
+        localIsDemo && !cloudIsDemo
+          ? (Array.isArray(cloud.shifts) ? cloud.shifts : [])
+          : mergeCloudFirst(s.shifts, Array.isArray(cloud.shifts) ? cloud.shifts : []);
+
+      const nextMeds =
+        localIsDemo && !cloudIsDemo
+          ? (Array.isArray(cloud.medications) ? cloud.medications : [])
+          : mergeCloudFirst(
+              s.medications,
+              Array.isArray(cloud.medications) ? cloud.medications : []
+            );
+
+      const nextSettlements =
+        localIsDemo && !cloudIsDemo
+          ? (Array.isArray(cloud.settlements) ? cloud.settlements : [])
+          : mergeCloudFirst(
+              s.settlements,
+              Array.isArray(cloud.settlements) ? cloud.settlements : []
+            );
+
+      set({
+        recipient: cloud.recipient || s.recipient,
+        members: nextMembers,
+        fundContributions: nextFunds,
+        expenses: nextExpenses,
+        settlements: nextSettlements,
+        shifts: nextShifts,
+        medications: nextMeds,
+        currencyCode: cloud.currencyCode || s.currencyCode,
+        currencySymbol: cloud.currencySymbol || s.currencySymbol,
+        deletedIds: Array.from(allDeleted),
+        syncStatus: 'synced',
+        lastSyncedAt: cloudUpdatedAt || new Date().toISOString(),
+        syncError: null,
+      });
+      saveLocalOnly();
+    },
+
+    pushToCloudRoom: async () => {
+      const s = get();
+      if (!s.roomCode || !isSupabaseReady()) return;
+
+      set({ syncStatus: 'syncing', syncError: null });
+
+      const payload: CloudLedgerPayload = {
+        app: 'CareCircle',
+        version: '1.3.0',
+        updatedAt: new Date().toISOString(),
+        language: s.language,
+        currencyCode: s.currencyCode,
+        currencySymbol: s.currencySymbol,
+        recipient: s.recipient,
+        members: s.members,
+        fundContributions: s.fundContributions,
+        expenses: s.expenses,
+        settlements: s.settlements,
+        shifts: s.shifts,
+        medications: s.medications,
+        deletedIds: s.deletedIds,
+      };
+
+      const res = await supabaseSyncService.upsertRoom(
+        s.roomCode,
+        s.recipient.name || 'Family Care Hub',
+        payload
+      );
+
+      if (res.success) {
+        set({
+          syncStatus: 'synced',
+          lastSyncedAt: res.updatedAt || new Date().toISOString(),
+          syncError: null,
+        });
+        saveLocalOnly();
+      } else {
+        set({
+          syncStatus: 'error',
+          syncError: res.error || 'Cloud sync failed',
+        });
+      }
     },
 
     exportSyncJson: () => {
