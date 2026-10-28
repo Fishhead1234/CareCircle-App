@@ -1,183 +1,290 @@
 import React, { useState } from 'react';
 import {
+  FileText,
+  Printer,
+  Download,
   Users,
-  HeartHandshake,
+  HeartPulse,
   Share2,
   Upload,
-  Key,
-  Sun,
-  Moon,
   Plus,
   Trash2,
-  RotateCcw,
   CheckCircle2,
-  Scale,
-  Crown,
+  RefreshCw,
+  Globe,
+  KeyRound,
+  Lock,
 } from 'lucide-react';
 import { useCareStore } from '../../store/careStore';
+import { pdfReportService } from '../../services/pdfReportService';
+import { SUPPORTED_LANGUAGES } from '../../i18n/translations';
 
 const AVATAR_COLORS = ['#0D9488', '#2563EB', '#7C3AED', '#EA580C', '#DB2777', '#059669'];
 
 export const SettingsAndFamilyScreen: React.FC = () => {
   const {
-    themeMode,
-    toggleTheme,
     recipient,
-    updateRecipient,
     members,
+    expenses,
+    shifts,
+    currencySymbol,
+    language,
+    setLanguage,
+    geminiApiKey,
+    isAdmin,
+    setGeminiApiKey,
+    unlockAdmin,
+    updateRecipient,
     addFamilyMember,
     updateFamilyMember,
     removeFamilyMember,
     equalizeSplits,
-    geminiApiKey,
-    setGeminiApiKey,
+    getMemberBalances,
     exportSyncJson,
     importSyncJson,
     resetToDemoData,
-    isAdmin,
-    unlockAdmin,
+    t,
   } = useCareStore();
 
+  const [pdfTaxOnly, setPdfTaxOnly] = useState(false);
+
+  // Add Member
   const [newMemberName, setNewMemberName] = useState('');
-  const [newMemberRole, setNewMemberRole] = useState('Sibling / Care Member');
-  const [newMemberSplit, setNewMemberSplit] = useState('25');
+  const [newMemberRelation, setNewMemberRelation] = useState('');
 
-  const [keyInput, setKeyInput] = useState(geminiApiKey);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [syncText, setSyncText] = useState('');
+  // Sync
+  const [importJsonText, setImportJsonText] = useState('');
   const [showImportBox, setShowImportBox] = useState(false);
+  const [bannerMsg, setBannerMsg] = useState<string | null>(null);
 
-  // Hidden 5-tap admin access
-  const [tapCount, setTapCount] = useState(0);
-  const [showAdminInput, setShowAdminInput] = useState(false);
-  const [adminPass, setAdminPass] = useState('');
+  // Hidden 5-tap Admin unlock
+  const [versionTapCount, setVersionTapCount] = useState(0);
+  const [showAdminPrompt, setShowAdminPrompt] = useState(false);
+  const [adminPassInput, setAdminPassInput] = useState('');
 
-  const totalSplitWeight = members.reduce((acc, m) => acc + (m.splitPercentage || 0), 0);
+  const balances = getMemberBalances();
+  const filteredExpenses = pdfTaxOnly
+    ? expenses.filter((e) => e.isTaxDeductible)
+    : expenses;
+
+  const handlePrintPdf = () => {
+    pdfReportService.openPrintPdfWindow({
+      recipient,
+      members,
+      expenses: filteredExpenses,
+      shifts,
+      balances,
+      filterLabel: pdfTaxOnly ? t('filter_tax_only') : t('filter_all_bills'),
+      currency: currencySymbol,
+      language,
+    });
+  };
+
+  const handleExportCsv = () => {
+    pdfReportService.downloadCsvExport({
+      recipient,
+      members,
+      expenses: filteredExpenses,
+      shifts,
+      balances,
+      filterLabel: pdfTaxOnly ? t('filter_tax_only') : t('filter_all_bills'),
+      currency: currencySymbol,
+      language,
+    });
+  };
 
   const handleAddMember = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMemberName.trim()) return;
     addFamilyMember({
       name: newMemberName.trim(),
-      relationship: newMemberRole.trim() || 'Family Member',
+      relationship: newMemberRelation.trim() || 'Family',
       avatarColor: AVATAR_COLORS[members.length % AVATAR_COLORS.length],
-      splitPercentage: Math.max(0, Number(newMemberSplit) || 20),
+      splitPercentage: 0,
     });
     setNewMemberName('');
-    setStatusMessage('✓ Added family member to Care Circle.');
-    setTimeout(() => setStatusMessage(null), 3500);
+    setNewMemberRelation('');
   };
 
-  const handleCopySyncSnapshot = async () => {
+  const handleCopySyncCode = async () => {
     const json = exportSyncJson();
     try {
       await navigator.clipboard.writeText(json);
-      setStatusMessage('✓ Copied Family Sync Snapshot to clipboard! Paste in family chat to sync.');
+      setBannerMsg('✓ ' + t('copy_sync_btn'));
     } catch {
-      setSyncText(json);
-      setShowImportBox(true);
-      setStatusMessage('✓ Generated Family Sync Snapshot below.');
+      setBannerMsg('✓ Copied');
     }
-    setTimeout(() => setStatusMessage(null), 4000);
+    setTimeout(() => setBannerMsg(null), 3000);
   };
 
-  const handleImportSnapshot = () => {
-    const res = importSyncJson(syncText);
-    setStatusMessage(`${res.success ? '✓' : '✕'} ${res.message}`);
+  const handleImportSync = () => {
+    const res = importSyncJson(importJsonText);
+    setBannerMsg(res.message);
     if (res.success) {
       setShowImportBox(false);
-      setSyncText('');
+      setImportJsonText('');
     }
-    setTimeout(() => setStatusMessage(null), 4000);
+    setTimeout(() => setBannerMsg(null), 3000);
   };
 
   const handleVersionTap = () => {
-    const next = tapCount + 1;
-    setTapCount(next);
+    const next = versionTapCount + 1;
+    setVersionTapCount(next);
     if (next >= 5) {
-      setShowAdminInput(true);
-      setTapCount(0);
+      setShowAdminPrompt(true);
+      setVersionTapCount(0);
     }
   };
 
   return (
-    <div className="space-y-4 pb-28">
-      {statusMessage && (
-        <div className="p-3 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-xs font-bold flex items-center gap-2">
+    <div className="space-y-4 pb-8">
+      {bannerMsg && (
+        <div className="rounded-2xl bg-emerald-600 text-white px-4 py-3 text-xs font-bold flex items-center gap-2 shadow">
           <CheckCircle2 className="w-4 h-4 shrink-0" />
-          <span>{statusMessage}</span>
+          <span>{bannerMsg}</span>
         </div>
       )}
 
-      {/* 1. FAMILY CARE TEAM & SPLIT RATIOS */}
-      <div className="rounded-2xl p-4 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-3.5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Users className="w-4 h-4 text-teal-600 dark:text-teal-400" />
-            <div>
-              <h2 className="text-xs font-extrabold uppercase tracking-wider text-slate-900 dark:text-white">
-                Family Care Team &amp; Pool Split Ratios
-              </h2>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                Total split weight: <strong className="font-mono">{totalSplitWeight}%</strong>
-              </p>
-            </div>
+      {/* 1. 1-Click PDF Summary & CSV Card */}
+      <div className="rounded-3xl bg-gradient-to-br from-teal-700 via-teal-800 to-slate-900 text-white p-5 shadow-lg">
+        <div className="flex items-center gap-2.5 mb-2">
+          <div className="w-9 h-9 rounded-2xl bg-white/15 flex items-center justify-center">
+            <FileText className="w-5 h-5 text-teal-200" />
           </div>
+          <h2 className="text-base font-extrabold">{t('pdf_card_title')}</h2>
+        </div>
+        <p className="text-xs text-teal-100/90 leading-relaxed mb-3.5">
+          {t('pdf_card_desc')}
+        </p>
 
+        {/* Simple Filter Toggle */}
+        <div className="flex items-center gap-2 mb-3.5">
           <button
-            type="button"
-            onClick={equalizeSplits}
-            className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 text-xs font-bold flex items-center gap-1 transition cursor-pointer"
+            onClick={() => setPdfTaxOnly(false)}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+              !pdfTaxOnly
+                ? 'bg-white text-slate-900'
+                : 'bg-white/10 text-teal-100 hover:bg-white/20'
+            }`}
           >
-            <Scale className="w-3.5 h-3.5 text-teal-500" />
-            <span>Equal Split</span>
+            {t('filter_all_bills')} ({expenses.length})
+          </button>
+          <button
+            onClick={() => setPdfTaxOnly(true)}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+              pdfTaxOnly
+                ? 'bg-white text-slate-900'
+                : 'bg-white/10 text-teal-100 hover:bg-white/20'
+            }`}
+          >
+            {t('filter_tax_only')}
           </button>
         </div>
 
-        <div className="space-y-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          <button
+            onClick={handlePrintPdf}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-extrabold text-xs shadow-md cursor-pointer"
+          >
+            <Printer className="w-4 h-4" />
+            <span>{t('generate_pdf_btn')}</span>
+          </button>
+          <button
+            onClick={handleExportCsv}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-white/15 hover:bg-white/25 text-white font-bold text-xs cursor-pointer"
+          >
+            <Download className="w-4 h-4" />
+            <span>{t('export_csv_btn')}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 2. Language Selector Card */}
+      <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4 shadow-sm">
+        <h3 className="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-1.5 mb-3">
+          <Globe className="w-4 h-4 text-teal-600" />
+          <span>語言設定 / Language</span>
+        </h3>
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+          {SUPPORTED_LANGUAGES.map((langOpt) => {
+            const active = language === langOpt.code;
+            return (
+              <button
+                key={langOpt.code}
+                onClick={() => setLanguage(langOpt.code)}
+                className={`flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl border text-xs font-bold transition cursor-pointer ${
+                  active
+                    ? 'border-teal-600 bg-teal-600 text-white shadow-sm'
+                    : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                }`}
+              >
+                <span>{langOpt.flag}</span>
+                <span>{langOpt.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 3. Family Members & Split % */}
+      <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4 shadow-sm">
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <div>
+            <h3 className="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-1.5">
+              <Users className="w-4 h-4 text-teal-600" />
+              <span>{t('family_card_title')}</span>
+            </h3>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+              {t('family_card_desc')}
+            </p>
+          </div>
+          <button
+            onClick={equalizeSplits}
+            className="px-3 py-1.5 rounded-xl bg-teal-500/10 text-teal-700 dark:text-teal-300 font-bold text-xs cursor-pointer shrink-0"
+          >
+            {t('equal_split_btn')}
+          </button>
+        </div>
+
+        <div className="space-y-2 mb-3">
           {members.map((m) => (
             <div
               key={m.id}
-              className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950/70 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-2"
+              className="p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between gap-2"
             >
               <div className="flex items-center gap-2.5 min-w-0">
                 <div
-                  className="w-8 h-8 rounded-xl flex items-center justify-center text-white font-bold text-xs shrink-0"
+                  className="w-8 h-8 rounded-xl flex items-center justify-center text-white font-black text-xs shrink-0"
                   style={{ backgroundColor: m.avatarColor }}
                 >
-                  {m.name[0]}
+                  {m.name.slice(0, 2)}
                 </div>
                 <div className="min-w-0">
                   <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
                     {m.name}
                   </div>
-                  <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-                    {m.relationship}
-                  </div>
+                  <div className="text-[10px] text-slate-500 truncate">{m.relationship}</div>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                <div className="flex items-center gap-1">
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={m.splitPercentage}
-                    onChange={(e) =>
-                      updateFamilyMember(m.id, {
-                        splitPercentage: Math.max(0, Number(e.target.value) || 0),
-                      })
-                    }
-                    className="w-14 rounded-lg px-2 py-1 text-right text-xs font-mono font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800"
-                  />
-                  <span className="text-xs font-mono text-slate-400">%</span>
-                </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={m.splitPercentage}
+                  onChange={(e) =>
+                    updateFamilyMember(m.id, {
+                      splitPercentage: Math.max(0, Math.min(100, Number(e.target.value) || 0)),
+                    })
+                  }
+                  className="w-14 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono font-bold text-center text-slate-900 dark:text-white"
+                />
+                <span className="text-xs font-bold text-slate-500">%</span>
                 {members.length > 1 && (
                   <button
-                    type="button"
                     onClick={() => removeFamilyMember(m.id)}
-                    className="p-1 text-slate-400 hover:text-rose-500 transition cursor-pointer"
+                    className="p-1 text-slate-400 hover:text-rose-500 cursor-pointer"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -187,257 +294,177 @@ export const SettingsAndFamilyScreen: React.FC = () => {
           ))}
         </div>
 
-        {/* Add Family Member Form */}
-        <form onSubmit={handleAddMember} className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-            Add Sibling or Care Team Member
-          </span>
-          <div className="grid grid-cols-3 gap-2">
-            <input
-              type="text"
-              value={newMemberName}
-              onChange={(e) => setNewMemberName(e.target.value)}
-              placeholder="Name (e.g. Michael Chen)"
-              className="rounded-xl px-2.5 py-2 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800"
-            />
-            <input
-              type="text"
-              value={newMemberRole}
-              onChange={(e) => setNewMemberRole(e.target.value)}
-              placeholder="Role (e.g. Brother)"
-              className="rounded-xl px-2.5 py-2 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800"
-            />
-            <button
-              type="submit"
-              className="rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs flex items-center justify-center gap-1 transition cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Add Member</span>
-            </button>
-          </div>
+        <form onSubmit={handleAddMember} className="flex items-center gap-2">
+          <input
+            type="text"
+            value={newMemberName}
+            onChange={(e) => setNewMemberName(e.target.value)}
+            placeholder={t('add_member_placeholder')}
+            className="flex-1 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-900 dark:text-white"
+          />
+          <input
+            type="text"
+            value={newMemberRelation}
+            onChange={(e) => setNewMemberRelation(e.target.value)}
+            placeholder={t('add_role_placeholder')}
+            className="w-28 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-900 dark:text-white"
+          />
+          <button
+            type="submit"
+            className="px-3.5 py-2 rounded-xl bg-teal-600 text-white font-bold text-xs cursor-pointer shrink-0"
+          >
+            <Plus className="w-4 h-4" />
+          </button>
         </form>
       </div>
 
-      {/* 2. CARE RECIPIENT & INSURANCE PROFILE */}
-      <div className="rounded-2xl p-4 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-3">
-        <div className="flex items-center gap-2">
-          <HeartHandshake className="w-4 h-4 text-teal-600 dark:text-teal-400" />
-          <h2 className="text-xs font-extrabold uppercase tracking-wider text-slate-900 dark:text-white">
-            Care Recipient &amp; Insurance Policy Details
-          </h2>
-        </div>
+      {/* 4. Care Recipient Info */}
+      <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4 shadow-sm space-y-3">
+        <h3 className="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-1.5">
+          <HeartPulse className="w-4 h-4 text-rose-500" />
+          <span>{t('recipient_card_title')}</span>
+        </h3>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+        <div className="space-y-2.5">
           <div>
-            <label className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
-              Full Legal Name (For Insurance Claims)
+            <label className="block text-[11px] font-bold text-slate-500 mb-1">
+              {t('recipient_name_label')}
             </label>
             <input
               type="text"
               value={recipient.name}
               onChange={(e) => updateRecipient({ name: e.target.value })}
-              className="w-full rounded-xl px-3 py-2 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800"
+              className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
             />
           </div>
           <div>
-            <label className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
-              Primary Physician / Clinic
+            <label className="block text-[11px] font-bold text-slate-500 mb-1">
+              {t('recipient_doctor_label')}
             </label>
             <input
               type="text"
               value={recipient.primaryPhysician}
               onChange={(e) => updateRecipient({ primaryPhysician: e.target.value })}
-              className="w-full rounded-xl px-3 py-2 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800"
+              className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-900 dark:text-white"
             />
           </div>
           <div>
-            <label className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
-              Insurance Carrier &amp; Plan
+            <label className="block text-[11px] font-bold text-slate-500 mb-1">
+              {t('recipient_ins_label')}
             </label>
             <input
               type="text"
               value={recipient.insuranceProvider}
               onChange={(e) => updateRecipient({ insuranceProvider: e.target.value })}
-              className="w-full rounded-xl px-3 py-2 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800"
-            />
-          </div>
-          <div>
-            <label className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
-              Policy / Medicare ID Number
-            </label>
-            <input
-              type="text"
-              value={recipient.policyNumber}
-              onChange={(e) => updateRecipient({ policyNumber: e.target.value })}
-              className="w-full rounded-xl px-3 py-2 text-xs font-mono bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800"
+              className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-900 dark:text-white"
             />
           </div>
         </div>
       </div>
 
-      {/* 3. FAMILY HUB SYNC SNAPSHOT (EXPORT / IMPORT) */}
-      <div className="rounded-2xl p-4 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Share2 className="w-4 h-4 text-teal-600 dark:text-teal-400" />
-            <div>
-              <h2 className="text-xs font-extrabold uppercase tracking-wider text-slate-900 dark:text-white">
-                Family Sync Snapshot (No Account Required)
-              </h2>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                Copy &amp; share your family ledger code via WhatsApp/iMessage to sync devices
-              </p>
-            </div>
-          </div>
+      {/* 5. Family Sync Code & Demo Reset */}
+      <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4 shadow-sm space-y-3">
+        <div>
+          <h3 className="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-1.5">
+            <Share2 className="w-4 h-4 text-blue-600" />
+            <span>{t('sync_card_title')}</span>
+          </h3>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+            {t('sync_card_desc')}
+          </p>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
-            type="button"
-            onClick={handleCopySyncSnapshot}
-            className="min-h-[42px] py-2 px-3 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+            onClick={handleCopySyncCode}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs cursor-pointer"
           >
             <Share2 className="w-3.5 h-3.5" />
-            <span>Copy Family Sync Code</span>
+            <span>{t('copy_sync_btn')}</span>
           </button>
           <button
-            type="button"
             onClick={() => setShowImportBox(!showImportBox)}
-            className="min-h-[42px] py-2 px-3 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer"
           >
             <Upload className="w-3.5 h-3.5" />
-            <span>Import Sync Code</span>
+            <span>{t('import_sync_btn')}</span>
+          </button>
+          <button
+            onClick={resetToDemoData}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-400 cursor-pointer"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>{t('restore_demo_btn')}</span>
           </button>
         </div>
 
         {showImportBox && (
-          <div className="space-y-2 pt-1">
+          <div className="space-y-2 pt-2">
             <textarea
-              rows={4}
-              value={syncText}
-              onChange={(e) => setSyncText(e.target.value)}
-              placeholder="Paste CareCircle JSON Sync Snapshot here..."
-              className="w-full rounded-xl p-2.5 text-xs font-mono bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800"
+              rows={3}
+              value={importJsonText}
+              onChange={(e) => setImportJsonText(e.target.value)}
+              placeholder="Paste Family Sync JSON..."
+              className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-mono text-slate-900 dark:text-white"
             />
             <button
-              type="button"
-              onClick={handleImportSnapshot}
-              className="w-full py-2 rounded-xl bg-teal-600 text-white font-bold text-xs cursor-pointer"
+              onClick={handleImportSync}
+              className="px-4 py-2 rounded-xl bg-teal-600 text-white font-bold text-xs cursor-pointer"
             >
-              Load &amp; Sync Family Ledger
+              {t('apply_sync_btn')}
+            </button>
+          </div>
+        )}
+
+        {/* Optional Gemini Key */}
+        <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+          <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 mb-1">
+            <KeyRound className="w-3 h-3" />
+            <span>Gemini API Key (Optional)</span>
+          </label>
+          <input
+            type="password"
+            value={geminiApiKey}
+            onChange={(e) => setGeminiApiKey(e.target.value)}
+            placeholder="AIzaSy..."
+            className="w-full px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-mono text-slate-900 dark:text-white"
+          />
+        </div>
+      </div>
+
+      {/* Footer Version (5-Tap Admin Unlock) */}
+      <div className="text-center pt-1">
+        <button
+          type="button"
+          onClick={handleVersionTap}
+          className="text-[11px] text-slate-400 select-none cursor-pointer"
+        >
+          CareCircle v1.1.0 • {isAdmin ? 'Admin Pro Unlocked' : 'Family Hub'}
+        </button>
+
+        {showAdminPrompt && (
+          <div className="mt-2 max-w-xs mx-auto p-3 rounded-2xl bg-slate-900 text-white flex items-center gap-2">
+            <Lock className="w-4 h-4 text-teal-400 shrink-0" />
+            <input
+              type="password"
+              value={adminPassInput}
+              onChange={(e) => setAdminPassInput(e.target.value)}
+              placeholder="Admin passcode"
+              className="flex-1 px-2.5 py-1 rounded-lg bg-slate-800 text-xs text-white"
+            />
+            <button
+              onClick={() => {
+                unlockAdmin(adminPassInput);
+                setShowAdminPrompt(false);
+                setAdminPassInput('');
+              }}
+              className="px-2.5 py-1 rounded-lg bg-teal-500 text-slate-950 font-bold text-xs"
+            >
+              OK
             </button>
           </div>
         )}
       </div>
-
-      {/* 4. APPEARANCE, GEMINI AI OCR KEY & DATA RESET */}
-      <div className="rounded-2xl p-4 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-3.5">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-extrabold uppercase tracking-wider text-slate-900 dark:text-white">
-            Display Theme
-          </span>
-          <button
-            type="button"
-            onClick={toggleTheme}
-            className="px-3.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-          >
-            {themeMode === 'light' ? (
-              <>
-                <Sun className="w-4 h-4 text-amber-500" />
-                <span>Light Mode</span>
-              </>
-            ) : (
-              <>
-                <Moon className="w-4 h-4 text-teal-400" />
-                <span>Dark Mode</span>
-              </>
-            )}
-          </button>
-        </div>
-
-        <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-slate-800">
-          <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-            <Key className="w-3.5 h-3.5 text-teal-500" />
-            <span>Gemini 3.8 Flash API Key (Optional for Live Camera OCR)</span>
-          </label>
-          <div className="flex gap-2">
-            <input
-              type="password"
-              value={keyInput}
-              onChange={(e) => setKeyInput(e.target.value)}
-              placeholder="Paste AIzaSy... key (or leave blank for built-in OCR)"
-              className="flex-1 rounded-xl px-3 py-2 text-xs font-mono bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800"
-            />
-            <button
-              type="button"
-              onClick={() => {
-                setGeminiApiKey(keyInput);
-                setStatusMessage('✓ Saved Gemini 3.8 Flash Vision OCR key.');
-                setTimeout(() => setStatusMessage(null), 3000);
-              }}
-              className="px-4 py-2 rounded-xl bg-teal-600 text-white text-xs font-bold cursor-pointer"
-            >
-              Save
-            </button>
-          </div>
-        </div>
-
-        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-          <button
-            type="button"
-            onClick={() => {
-              resetToDemoData();
-              setStatusMessage('✓ Restored sample family care data.');
-              setTimeout(() => setStatusMessage(null), 3000);
-            }}
-            className="text-xs font-semibold text-slate-500 hover:text-slate-900 dark:hover:text-white flex items-center gap-1 cursor-pointer"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>Restore Demo Family Data</span>
-          </button>
-
-          {isAdmin && (
-            <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-teal-500/15 text-teal-600 dark:text-teal-400">
-              <Crown className="w-3 h-3" /> ADMIN UNLOCKED
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Hidden 5-Tap Admin Unlock Footer */}
-      <div
-        onClick={handleVersionTap}
-        className="text-center pt-1 text-[11px] font-mono text-slate-400 select-none cursor-pointer"
-      >
-        <p>CareCircle v1.0.0 • Family Caregiver &amp; Medical Expense Coordinator</p>
-        <p>HIPAA-Conscious Local-First Architecture • IRS Pub 502 Ready</p>
-      </div>
-
-      {showAdminInput && !isAdmin && (
-        <div className="p-3 rounded-2xl bg-white dark:bg-slate-900 border border-teal-500/40 flex gap-2">
-          <input
-            type="password"
-            value={adminPass}
-            onChange={(e) => setAdminPass(e.target.value)}
-            placeholder="Enter admin passcode..."
-            className="flex-1 rounded-xl px-3 py-1.5 text-xs font-mono bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800"
-          />
-          <button
-            type="button"
-            onClick={() => {
-              if (unlockAdmin(adminPass)) {
-                setShowAdminInput(false);
-                setAdminPass('');
-                setStatusMessage('✓ Admin Mode Activated');
-              }
-            }}
-            className="px-3.5 py-1.5 rounded-xl bg-teal-600 text-white text-xs font-bold"
-          >
-            Unlock
-          </button>
-        </div>
-      )}
     </div>
   );
 };
-

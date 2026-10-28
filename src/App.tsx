@@ -1,201 +1,172 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  HeartHandshake,
-  Camera,
+  LayoutDashboard,
   Clock,
-  FileSpreadsheet,
-  Users,
+  FileText,
+  Camera,
   Sun,
   Moon,
-  Plus,
+  HeartHandshake,
+  Globe,
 } from 'lucide-react';
-import { Capacitor } from '@capacitor/core';
-import { StatusBar, Style } from '@capacitor/status-bar';
 import { useCareStore, AppTab } from './store/careStore';
 import { FamilyHubScreen } from './screens/Hub/FamilyHubScreen';
 import { CaregiverAndMedsScreen } from './screens/CareLog/CaregiverAndMedsScreen';
-import { ReimbursementReportScreen } from './screens/Reports/ReimbursementReportScreen';
 import { SettingsAndFamilyScreen } from './screens/Settings/SettingsAndFamilyScreen';
 import { ReceiptScannerModal } from './screens/Scanner/ReceiptScannerModal';
+import { SUPPORTED_LANGUAGES, AppLanguage } from './i18n/translations';
 
 export const App: React.FC = () => {
-  const { activeTab, setActiveTab, themeMode, toggleTheme, expenses, medications } =
-    useCareStore();
+  const {
+    activeTab,
+    setActiveTab,
+    themeMode,
+    toggleTheme,
+    language,
+    setLanguage,
+    t,
+  } = useCareStore();
   const [isScannerOpen, setIsScannerOpen] = useState(false);
 
   useEffect(() => {
-    const isDark = themeMode === 'dark';
-    document.documentElement.classList.toggle('dark', isDark);
-    document.body.style.backgroundColor = isDark ? '#0B1120' : '#F4F6F9';
-
-    if (Capacitor.isNativePlatform()) {
-      StatusBar.setOverlaysWebView({ overlay: false }).catch(() => {});
-      StatusBar.setStyle({ style: isDark ? Style.Dark : Style.Light }).catch(() => {});
-      StatusBar.setBackgroundColor({ color: isDark ? '#0B1120' : '#F4F6F9' }).catch(
-        () => {}
-      );
+    const root = document.documentElement;
+    if (themeMode === 'dark') {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
     }
   }, [themeMode]);
 
-  const lowRefillCount = medications.filter(
-    (m) => m.pillsRemaining <= m.refillThreshold
-  ).length;
-
-  const navItems: { id: AppTab; label: string; icon: React.ReactNode; badge?: number }[] = [
+  const navItems: { id: AppTab; label: string; icon: React.ReactNode }[] = [
     {
       id: 'hub',
-      label: 'Family Hub',
-      icon: <HeartHandshake className="w-5 h-5" />,
-      badge: expenses.length,
+      label: t('tab_hub'),
+      icon: <LayoutDashboard className="w-5 h-5" />,
     },
     {
       id: 'carelog',
-      label: 'Care & Meds',
+      label: t('tab_care'),
       icon: <Clock className="w-5 h-5" />,
-      badge: lowRefillCount > 0 ? lowRefillCount : undefined,
-    },
-    {
-      id: 'reports',
-      label: 'PDF Claims',
-      icon: <FileSpreadsheet className="w-5 h-5" />,
     },
     {
       id: 'settings',
-      label: 'Team & Sync',
-      icon: <Users className="w-5 h-5" />,
+      label: t('tab_settings'),
+      icon: <FileText className="w-5 h-5" />,
     },
   ];
 
   return (
-    <div className="min-h-screen w-full bg-[#E5E9F0] dark:bg-[#060A14] text-slate-900 dark:text-slate-100 flex justify-center items-stretch overflow-x-hidden">
-      {/* Mobile-First Phone Shell: 100% width on phones, sleek centered mobile frame on desktop/Vercel */}
-      <div className="w-full sm:max-w-md min-h-screen flex flex-col bg-[#F4F6F9] dark:bg-[#0B1120] sm:shadow-2xl sm:border-x sm:border-slate-200/80 dark:sm:border-slate-800/80 relative overflow-x-hidden">
-        {/* Top App Bar */}
-        <header className="sticky top-0 z-30 px-4 py-3 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-teal-600 to-emerald-500 text-white flex items-center justify-center shadow-sm shrink-0">
+    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col">
+      {/* Sticky Top Header with Instant Language Switcher */}
+      <header className="sticky top-0 z-30 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800">
+        <div className="max-w-xl mx-auto px-4 h-14 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center text-white shadow-sm shrink-0">
               <HeartHandshake className="w-5 h-5" />
             </div>
             <div className="min-w-0">
-              <div className="flex items-center gap-1.5">
-                <span className="font-extrabold text-sm tracking-tight text-slate-900 dark:text-white truncate">
-                  CareCircle
-                </span>
-                <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-teal-500/15 text-teal-600 dark:text-teal-400 shrink-0">
-                  FAMILY HUB
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-                Caregiver &amp; Medical Expense Coordinator
+              <span className="font-black text-sm tracking-tight text-slate-900 dark:text-white block truncate">
+                {t('app_title')}
+              </span>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
+                {t('app_subtitle')}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0">
+            {/* Language Dropdown Pill */}
+            <div className="relative flex items-center bg-slate-100 dark:bg-slate-800 rounded-xl px-2 py-1.5 border border-slate-200 dark:border-slate-700">
+              <Globe className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 mr-1 shrink-0" />
+              <select
+                aria-label="Language"
+                value={language}
+                onChange={(e) => setLanguage(e.target.value as AppLanguage)}
+                className="bg-transparent text-xs font-extrabold text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer pr-1"
+              >
+                {SUPPORTED_LANGUAGES.map((l) => (
+                  <option
+                    key={l.code}
+                    value={l.code}
+                    className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                  >
+                    {l.flag} {l.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <button
-              type="button"
               onClick={() => setIsScannerOpen(true)}
-              className="min-h-[42px] px-3.5 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-sm transition cursor-pointer active:scale-95"
+              className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-extrabold text-xs shadow-sm active:scale-95 transition cursor-pointer"
             >
-              <Camera className="w-4 h-4" />
-              <span>Snap Bill</span>
+              <Camera className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">{t('snap_bill_btn')}</span>
             </button>
 
             <button
-              type="button"
               onClick={toggleTheme}
-              title="Toggle Light / Dark Theme"
-              className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center transition cursor-pointer active:scale-95"
+              aria-label="Toggle theme"
+              className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
             >
-              {themeMode === 'light' ? (
-                <Moon className="w-4 h-4" />
-              ) : (
+              {themeMode === 'dark' ? (
                 <Sun className="w-4 h-4 text-amber-400" />
+              ) : (
+                <Moon className="w-4 h-4" />
               )}
             </button>
           </div>
-        </header>
-
-        {/* Main Screen Container */}
-        <main className="flex-1 px-3.5 pt-3.5">
-          {activeTab === 'hub' && (
-            <FamilyHubScreen onOpenScanner={() => setIsScannerOpen(true)} />
-          )}
-          {activeTab === 'carelog' && <CaregiverAndMedsScreen />}
-          {activeTab === 'reports' && <ReimbursementReportScreen />}
-          {activeTab === 'settings' && <SettingsAndFamilyScreen />}
-        </main>
-
-        {/* Persistent Thumb-Zone Quick Action Bar (Easy 1-Handed Mobile Reach) */}
-        <div className="sticky bottom-[64px] left-0 right-0 px-3.5 pb-2 z-20 pointer-events-none">
-          <div className="pointer-events-auto p-2 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/90 dark:border-slate-800 shadow-lg flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setIsScannerOpen(true)}
-              className="flex-1 min-h-[44px] px-3 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-extrabold flex items-center justify-center gap-1.5 shadow-xs transition cursor-pointer active:scale-95"
-            >
-              <Camera className="w-4 h-4" />
-              <span>+ Snap Medical Bill</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('carelog')}
-              className="min-h-[44px] px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold flex items-center justify-center gap-1 transition cursor-pointer active:scale-95"
-            >
-              <Plus className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
-              <span>Log Shift / Rx</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('reports')}
-              className="min-h-[44px] px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold flex items-center justify-center gap-1 transition cursor-pointer active:scale-95"
-            >
-              <FileSpreadsheet className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-              <span>PDF</span>
-            </button>
-          </div>
         </div>
+      </header>
 
-        {/* Bottom Navigation Bar (48px+ touch targets) */}
-        <nav className="sticky bottom-0 left-0 right-0 w-full z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200/80 dark:border-slate-800 px-2 py-1.5 pb-[max(0.375rem,env(safe-area-inset-bottom))] flex items-center justify-around">
+      {/* Main Mobile-First Container */}
+      <main className="flex-1 max-w-xl w-full mx-auto px-3.5 pt-4 pb-24">
+        {activeTab === 'hub' && (
+          <FamilyHubScreen onOpenScanner={() => setIsScannerOpen(true)} />
+        )}
+        {activeTab === 'carelog' && <CaregiverAndMedsScreen />}
+        {activeTab === 'settings' && <SettingsAndFamilyScreen />}
+      </main>
+
+      {/* Floating Camera Action Button on Mobile */}
+      <button
+        onClick={() => setIsScannerOpen(true)}
+        aria-label="Snap Receipt"
+        className="sm:hidden fixed right-4 bottom-20 z-30 w-13 h-13 rounded-2xl bg-gradient-to-br from-teal-500 to-emerald-600 text-white shadow-xl shadow-teal-600/30 flex items-center justify-center active:scale-95 transition cursor-pointer"
+      >
+        <Camera className="w-6 h-6" />
+      </button>
+
+      {/* Simple 3-Tab Bottom Navigation Bar */}
+      <nav className="fixed bottom-0 inset-x-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800">
+        <div className="max-w-xl mx-auto px-3 h-16 grid grid-cols-3 gap-1">
           {navItems.map((item) => {
             const active = activeTab === item.id;
             return (
               <button
                 key={item.id}
-                type="button"
                 onClick={() => setActiveTab(item.id)}
-                className={`relative flex-1 min-h-[48px] py-1.5 rounded-xl flex flex-col items-center justify-center gap-0.5 transition cursor-pointer active:scale-95 ${
+                className={`flex flex-col items-center justify-center gap-1 rounded-2xl my-1.5 transition cursor-pointer ${
                   active
-                    ? 'text-teal-600 dark:text-teal-400 font-extrabold bg-teal-500/10'
-                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 font-medium'
+                    ? 'text-teal-600 dark:text-teal-400 bg-teal-500/10 font-extrabold'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 font-semibold'
                 }`}
               >
-                <div className="relative">
-                  {item.icon}
-                  {item.badge !== undefined && (
-                    <span
-                      className={`absolute -top-1.5 -right-2.5 min-w-[16px] h-4 px-1 rounded-full text-[9px] font-mono font-bold flex items-center justify-center ${
-                        item.id === 'carelog'
-                          ? 'bg-amber-500 text-white'
-                          : 'bg-teal-600 text-white'
-                      }`}
-                    >
-                      {item.badge}
-                    </span>
-                  )}
-                </div>
-                <span className="text-[11px] leading-tight">{item.label}</span>
+                {item.icon}
+                <span className="text-[11px] leading-none">{item.label}</span>
               </button>
             );
           })}
-        </nav>
+        </div>
+      </nav>
 
-        {/* AI Receipt Scanner Modal */}
-        {isScannerOpen && (
-          <ReceiptScannerModal onClose={() => setIsScannerOpen(false)} />
-        )}
-      </div>
+      {/* AI Receipt Scanner Modal */}
+      <ReceiptScannerModal
+        isOpen={isScannerOpen}
+        onClose={() => setIsScannerOpen(false)}
+      />
     </div>
   );
 };
+
+export default App;

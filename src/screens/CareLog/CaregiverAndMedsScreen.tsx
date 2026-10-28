@@ -1,22 +1,19 @@
 import React, { useState } from 'react';
 import {
-  Clock,
   Pill,
-  Plus,
+  Clock,
   CheckCircle2,
+  Plus,
   AlertTriangle,
   Trash2,
-  UserCheck,
-  Stethoscope,
-  RefreshCw,
 } from 'lucide-react';
 import { useCareStore } from '../../store/careStore';
 
 export const CaregiverAndMedsScreen: React.FC = () => {
   const {
+    members,
     shifts,
     medications,
-    members,
     currencySymbol,
     addCaregiverShift,
     deleteCaregiverShift,
@@ -24,56 +21,53 @@ export const CaregiverAndMedsScreen: React.FC = () => {
     logDoseTaken,
     refillMedication,
     deleteMedication,
+    t,
   } = useCareStore();
 
   const [showAddShift, setShowAddShift] = useState(false);
   const [showAddMed, setShowAddMed] = useState(false);
 
-  // Shift Form State
-  const [caregiverName, setCaregiverName] = useState('Maria Santos, CNA');
-  const [role, setRole] = useState('Certified Home Health Aide');
-  const [shiftDate, setShiftDate] = useState(() => new Date().toISOString().split('T')[0]);
-  const [startTime, setStartTime] = useState('08:00');
-  const [endTime, setEndTime] = useState('16:00');
-  const [hours, setHours] = useState('8');
+  // Simple Shift state
+  const [caregiverName, setCaregiverName] = useState('');
+  const [shiftDate, setShiftDate] = useState(new Date().toISOString().split('T')[0]);
+  const [hours, setHours] = useState('6');
   const [hourlyRate, setHourlyRate] = useState('35');
   const [paidByMemberId, setPaidByMemberId] = useState(members[0]?.id || 'mem_sarah');
   const [vitalsOrNotes, setVitalsOrNotes] = useState('');
-  const [autoPostExpense, setAutoPostExpense] = useState(true);
+  const [autoCreateBill, setAutoCreateBill] = useState(true);
 
-  // Medication Form State
+  // Simple Med state
   const [medName, setMedName] = useState('');
   const [medDosage, setMedDosage] = useState('');
-  const [medFrequency, setMedFrequency] = useState('Twice Daily');
-  const [medPurpose, setMedPurpose] = useState('');
-  const [medDoctor, setMedDoctor] = useState('Dr. Marcus Lin, MD');
+  const [medFreq, setMedFreq] = useState('');
   const [medPills, setMedPills] = useState('30');
 
-  const memberMap = new Map(members.map((m) => [m.id, m.name]));
-  const totalHours = shifts.reduce((s, sh) => s + sh.hours, 0);
-  const totalShiftPay = shifts.reduce((s, sh) => s + sh.totalPay, 0);
+  const memberMap = new Map(members.map((m) => [m.id, m]));
 
   const handleCreateShift = (e: React.FormEvent) => {
     e.preventDefault();
-    const h = Math.max(0.5, Number(hours) || 1);
-    const rate = Math.max(1, Number(hourlyRate) || 35);
+    const h = parseFloat(hours) || 0;
+    const rate = parseFloat(hourlyRate) || 0;
+    if (!caregiverName.trim() || h <= 0) return;
+
     addCaregiverShift(
       {
-        caregiverName: caregiverName.trim() || 'Caregiver',
-        role: role.trim() || 'Home Care Aide',
+        caregiverName: caregiverName.trim(),
+        role: '',
         date: shiftDate,
-        startTime,
-        endTime,
+        startTime: '09:00',
+        endTime: '15:00',
         hours: h,
         hourlyRate: rate,
-        totalPay: Math.round(h * rate * 100) / 100,
+        totalPay: h * rate,
         paidByMemberId,
-        tasksCompleted: ['Vitals Check', 'Medication Assist', 'Mobility & Meals'],
-        vitalsOrNotes:
-          vitalsOrNotes.trim() || 'Routine daily care & mobility exercises completed.',
+        tasksCompleted: [],
+        vitalsOrNotes: vitalsOrNotes.trim(),
       },
-      autoPostExpense
+      autoCreateBill
     );
+
+    setCaregiverName('');
     setVitalsOrNotes('');
     setShowAddShift(false);
   };
@@ -81,179 +75,156 @@ export const CaregiverAndMedsScreen: React.FC = () => {
   const handleCreateMed = (e: React.FormEvent) => {
     e.preventDefault();
     if (!medName.trim()) return;
+
     addMedication({
       name: medName.trim(),
-      dosage: medDosage.trim() || '1 Tablet',
-      frequency: medFrequency.trim(),
-      timeOfDay: ['08:00 AM', '08:00 PM'],
-      purpose: medPurpose.trim() || 'Daily Maintenance',
-      prescribingDoctor: medDoctor.trim() || 'Primary Physician',
-      pillsRemaining: Math.max(1, Number(medPills) || 30),
-      refillThreshold: 14,
+      dosage: medDosage.trim() || '1 Pill',
+      frequency: medFreq.trim() || 'Daily',
+      timeOfDay: ['08:00'],
+      purpose: '',
+      prescribingDoctor: '',
+      pillsRemaining: parseInt(medPills, 10) || 30,
+      refillThreshold: 10,
     });
+
     setMedName('');
     setMedDosage('');
-    setMedPurpose('');
+    setMedFreq('');
     setShowAddMed(false);
   };
 
   return (
-    <div className="space-y-5 pb-28">
-      {/* 1. MEDICATION & REFILL SCHEDULE */}
-      <div className="rounded-2xl p-4 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-3.5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Pill className="w-4 h-4 text-teal-600 dark:text-teal-400" />
-            <div>
-              <h2 className="text-xs font-extrabold uppercase tracking-wider text-slate-900 dark:text-white">
-                Active Medications &amp; Dose Verification
-              </h2>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                Shared family &amp; caregiver log so doses are never doubled or missed
-              </p>
-            </div>
+    <div className="space-y-4 pb-8">
+      {/* 1. Daily Medication Checklist */}
+      <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4 shadow-sm">
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <div>
+            <h2 className="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-1.5">
+              <Pill className="w-4 h-4 text-teal-600" />
+              <span>{t('meds_title')}</span>
+            </h2>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+              {t('meds_subtitle')}
+            </p>
           </div>
+
           <button
-            type="button"
             onClick={() => setShowAddMed(!showAddMed)}
-            className="min-h-[36px] px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold flex items-center gap-1 transition cursor-pointer"
+            className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs cursor-pointer shrink-0"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>Add Rx</span>
+            <span>{t('add_med_btn')}</span>
           </button>
         </div>
 
+        {/* Simple Add Med Form */}
         {showAddMed && (
           <form
             onSubmit={handleCreateMed}
-            className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-2.5"
+            className="mb-4 p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 space-y-2.5"
           >
-            <div className="grid grid-cols-2 gap-2">
-              <input
-                type="text"
-                required
-                value={medName}
-                onChange={(e) => setMedName(e.target.value)}
-                placeholder="Medication Name (e.g. Eliquis)"
-                className="rounded-lg px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800"
-              />
+            <input
+              type="text"
+              required
+              value={medName}
+              onChange={(e) => setMedName(e.target.value)}
+              placeholder={t('med_name_placeholder')}
+              className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
+            />
+            <div className="grid grid-cols-3 gap-2">
               <input
                 type="text"
                 value={medDosage}
                 onChange={(e) => setMedDosage(e.target.value)}
-                placeholder="Dosage (e.g. 5 mg)"
-                className="rounded-lg px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800"
+                placeholder={t('med_dose_placeholder')}
+                className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
               />
               <input
                 type="text"
-                value={medPurpose}
-                onChange={(e) => setMedPurpose(e.target.value)}
-                placeholder="Purpose (e.g. Blood Pressure)"
-                className="rounded-lg px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800"
+                value={medFreq}
+                onChange={(e) => setMedFreq(e.target.value)}
+                placeholder={t('med_freq_placeholder')}
+                className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
               />
               <input
                 type="number"
                 value={medPills}
                 onChange={(e) => setMedPills(e.target.value)}
-                placeholder="Pills Remaining (e.g. 30)"
-                className="rounded-lg px-3 py-2 text-xs font-mono bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800"
+                placeholder={t('pills_left')}
+                className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono text-slate-900 dark:text-white"
               />
             </div>
             <div className="flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setShowAddMed(false)}
-                className="px-3 py-1.5 rounded-lg text-xs text-slate-500"
+                className="px-3 py-1.5 text-xs font-bold text-slate-500"
               >
-                Cancel
+                {t('cancel_btn')}
               </button>
               <button
                 type="submit"
-                className="px-4 py-1.5 rounded-lg bg-teal-600 text-white text-xs font-bold cursor-pointer"
+                className="px-4 py-1.5 rounded-xl bg-teal-600 text-white font-bold text-xs cursor-pointer"
               >
-                Save Medication
+                {t('add_med_btn')}
               </button>
             </div>
           </form>
         )}
 
+        {/* Medication Cards */}
         <div className="space-y-2.5">
           {medications.map((med) => {
-            const needsRefill = med.pillsRemaining <= med.refillThreshold;
+            const isLow = med.pillsRemaining <= med.refillThreshold;
             return (
               <div
                 key={med.id}
-                className={`p-3.5 rounded-2xl border space-y-2.5 ${
-                  needsRefill
-                    ? 'bg-amber-500/5 border-amber-500/40'
-                    : 'bg-slate-50 dark:bg-slate-950/70 border-slate-200/80 dark:border-slate-800'
-                }`}
+                className="p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
               >
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">
-                        {med.name}
-                      </h3>
-                      <span className="text-xs font-mono font-bold text-teal-600 dark:text-teal-400">
-                        {med.dosage}
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-extrabold text-sm text-slate-900 dark:text-white">
+                      {med.name}
+                    </span>
+                    <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-teal-500/10 text-teal-700 dark:text-teal-300">
+                      {med.dosage}
+                    </span>
+                    {isLow && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-600 dark:text-amber-400">
+                        <AlertTriangle className="w-3 h-3" />
+                        {t('refill_soon')} ({med.pillsRemaining})
                       </span>
-                      {needsRefill && (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30">
-                          <AlertTriangle className="w-3 h-3" />
-                          Refill Soon ({med.pillsRemaining} left)
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                      {med.frequency} • {med.purpose} • {med.prescribingDoctor}
-                    </p>
-                  </div>
-
-                  <span className="text-xs font-mono font-bold text-slate-600 dark:text-slate-300 shrink-0">
-                    {med.pillsRemaining} pills
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-200/70 dark:border-slate-800/80 text-xs">
-                  <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                    {med.lastTakenAt ? (
-                      <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-semibold">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        Last dose: {med.lastTakenAt} ({med.lastAdministeredBy})
-                      </span>
-                    ) : (
-                      <span>No dose logged today yet</span>
                     )}
                   </div>
-
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        logDoseTaken(med.id, members[0]?.name || 'Care Team')
-                      }
-                      className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition cursor-pointer"
-                    >
-                      ✓ Log Dose
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => refillMedication(med.id, 30)}
-                      title="Add 30-Pill Refill"
-                      className="px-2.5 py-1.5 rounded-lg bg-slate-200/80 dark:bg-slate-800 hover:bg-slate-300 text-slate-700 dark:text-slate-300 font-semibold text-xs flex items-center gap-1 transition cursor-pointer"
-                    >
-                      <RefreshCw className="w-3 h-3" />
-                      <span>+30</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => deleteMedication(med.id)}
-                      className="p-1.5 text-slate-400 hover:text-rose-500 transition cursor-pointer"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                  <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    {med.frequency} • {t('pills_left')}: {med.pillsRemaining}
                   </div>
+                  <div className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold mt-1">
+                    {med.lastTakenAt
+                      ? `${t('last_taken')} ${med.lastTakenAt} (${med.lastAdministeredBy || ''})`
+                      : t('not_taken_today')}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => logDoseTaken(med.id, members[0]?.name || 'Family')}
+                    className="px-3.5 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs cursor-pointer"
+                  >
+                    {t('take_dose_btn')}
+                  </button>
+                  <button
+                    onClick={() => refillMedication(med.id, 30)}
+                    className="px-2.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 cursor-pointer"
+                  >
+                    {t('refill_btn')}
+                  </button>
+                  <button
+                    onClick={() => deleteMedication(med.id)}
+                    className="p-2 text-slate-400 hover:text-rose-500 cursor-pointer"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
             );
@@ -261,198 +232,174 @@ export const CaregiverAndMedsScreen: React.FC = () => {
         </div>
       </div>
 
-      {/* 2. CAREGIVER SHIFT & VITALS LOG */}
-      <div className="rounded-2xl p-4 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-3.5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Clock className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-            <div>
-              <h2 className="text-xs font-extrabold uppercase tracking-wider text-slate-900 dark:text-white">
-                Caregiver Hours &amp; Shift Log ({totalHours} hrs • {currencySymbol}
-                {totalShiftPay.toFixed(0)})
-              </h2>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                Track visiting nurse/aide hours and auto-sync pay to the family pool
-              </p>
-            </div>
+      {/* 2. Caregiver Shift Hours */}
+      <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4 shadow-sm">
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <div>
+            <h2 className="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-1.5">
+              <Clock className="w-4 h-4 text-purple-600" />
+              <span>{t('shifts_title')}</span>
+            </h2>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+              {t('shifts_subtitle')}
+            </p>
           </div>
 
           <button
-            type="button"
             onClick={() => setShowAddShift(!showAddShift)}
-            className="min-h-[36px] px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold flex items-center gap-1 transition cursor-pointer"
+            className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs cursor-pointer shrink-0"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>Log Shift</span>
+            <span>{t('add_shift_btn')}</span>
           </button>
         </div>
 
         {showAddShift && (
           <form
             onSubmit={handleCreateShift}
-            className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-3"
+            className="mb-4 p-3.5 rounded-2xl bg-purple-500/5 border border-purple-500/20 space-y-3"
           >
             <div className="grid grid-cols-2 gap-2.5">
               <div>
-                <label className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
-                  Caregiver Name
+                <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                  {t('caregiver_name')}
                 </label>
                 <input
                   type="text"
                   required
                   value={caregiverName}
                   onChange={(e) => setCaregiverName(e.target.value)}
-                  className="w-full rounded-lg px-2.5 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800"
+                  placeholder="林美玲 / Maria"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
                 />
               </div>
               <div>
-                <label className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
-                  Date
+                <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                  {t('field_date')}
                 </label>
                 <input
                   type="date"
                   value={shiftDate}
                   onChange={(e) => setShiftDate(e.target.value)}
-                  className="w-full rounded-lg px-2.5 py-2 text-xs font-mono bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono text-slate-900 dark:text-white"
                 />
               </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2.5">
               <div>
-                <label className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
-                  Hours Worked
+                <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                  {t('shift_hours')}
                 </label>
                 <input
                   type="number"
                   step="0.5"
-                  min="0.5"
                   value={hours}
                   onChange={(e) => setHours(e.target.value)}
-                  className="w-full rounded-lg px-2.5 py-2 text-xs font-mono bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono font-bold text-slate-900 dark:text-white"
                 />
               </div>
               <div>
-                <label className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
-                  Hourly Rate ({currencySymbol}/hr)
+                <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                  {t('hourly_rate')} ({currencySymbol})
                 </label>
                 <input
                   type="number"
-                  step="1"
-                  min="1"
                   value={hourlyRate}
                   onChange={(e) => setHourlyRate(e.target.value)}
-                  className="w-full rounded-lg px-2.5 py-2 text-xs font-mono bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono font-bold text-slate-900 dark:text-white"
                 />
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                  {t('paid_by')}
+                </label>
+                <select
+                  value={paidByMemberId}
+                  onChange={(e) => setPaidByMemberId(e.target.value)}
+                  className="w-full px-2.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-900 dark:text-white"
+                >
+                  {members.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 
-            <div>
-              <label className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
-                Paid By Family Member
+            <input
+              type="text"
+              value={vitalsOrNotes}
+              onChange={(e) => setVitalsOrNotes(e.target.value)}
+              placeholder={t('shift_notes')}
+              className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
+            />
+
+            <div className="flex items-center justify-between pt-1">
+              <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={autoCreateBill}
+                  onChange={(e) => setAutoCreateBill(e.target.checked)}
+                  className="rounded text-purple-600"
+                />
+                <span>{t('auto_add_bill')}</span>
               </label>
-              <select
-                value={paidByMemberId}
-                onChange={(e) => setPaidByMemberId(e.target.value)}
-                className="w-full rounded-lg px-2.5 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800"
-              >
-                {members.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name} ({m.relationship})
-                  </option>
-                ))}
-              </select>
-            </div>
 
-            <div>
-              <label className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
-                Vitals &amp; Care Notes (BP, Glucose, Mobility)
-              </label>
-              <input
-                type="text"
-                value={vitalsOrNotes}
-                onChange={(e) => setVitalsOrNotes(e.target.value)}
-                placeholder="e.g. BP 124/78, Fasting Glucose 105 mg/dL, 30m walk completed"
-                className="w-full rounded-lg px-2.5 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800"
-              />
-            </div>
-
-            <label className="flex items-center justify-between text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer">
-              <span>
-                Automatically add shift cost ({currencySymbol}
-                {((Number(hours) || 0) * (Number(hourlyRate) || 0)).toFixed(2)}) to Family
-                Expense Pool
-              </span>
-              <input
-                type="checkbox"
-                checked={autoPostExpense}
-                onChange={(e) => setAutoPostExpense(e.target.checked)}
-                className="w-4 h-4 accent-purple-600 rounded"
-              />
-            </label>
-
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setShowAddShift(false)}
-                className="px-3 py-1.5 rounded-lg text-xs text-slate-500"
-              >
-                Cancel
-              </button>
               <button
                 type="submit"
-                className="px-4 py-2 rounded-lg bg-purple-600 text-white text-xs font-bold cursor-pointer"
+                className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs cursor-pointer"
               >
-                Save Shift Log
+                {t('save_shift_btn')}
               </button>
             </div>
           </form>
         )}
 
         <div className="space-y-2.5">
-          {shifts.map((sh) => (
-            <div
-              key={sh.id}
-              className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-950/70 border border-slate-200/80 dark:border-slate-800 space-y-2"
-            >
-              <div className="flex items-start justify-between gap-2">
+          {shifts.map((sh) => {
+            const payer = memberMap.get(sh.paidByMemberId);
+            return (
+              <div
+                key={sh.id}
+                className="p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex items-start justify-between gap-2"
+              >
                 <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-extrabold text-slate-900 dark:text-white">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-extrabold text-sm text-slate-900 dark:text-white">
                       {sh.caregiverName}
                     </span>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-600 dark:text-purple-400 font-bold">
-                      {sh.hours} hrs @ {currencySymbol}
-                      {sh.hourlyRate}/hr
-                    </span>
+                    <span className="text-xs font-mono text-slate-500">{sh.date}</span>
                   </div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    {sh.date} ({sh.startTime}–{sh.endTime}) • Paid by{' '}
-                    <strong>{memberMap.get(sh.paidByMemberId) || 'Family'}</strong>
-                  </p>
+                  <div className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+                    {sh.hours}h × {currencySymbol}
+                    {sh.hourlyRate}/hr • {t('paid_by')} {payer?.name || '-'}
+                  </div>
+                  {sh.vitalsOrNotes && (
+                    <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                      {sh.vitalsOrNotes}
+                    </div>
+                  )}
                 </div>
 
-                <div className="text-right flex items-center gap-2">
-                  <span className="text-sm font-black font-mono text-slate-900 dark:text-white">
+                <div className="text-right shrink-0">
+                  <div className="text-sm font-black font-mono text-slate-900 dark:text-white">
                     {currencySymbol}
-                    {sh.totalPay.toFixed(2)}
-                  </span>
+                    {sh.totalPay.toFixed(0)}
+                  </div>
                   <button
-                    type="button"
                     onClick={() => deleteCaregiverShift(sh.id)}
-                    className="p-1 text-slate-400 hover:text-rose-500 transition cursor-pointer"
+                    className="mt-1 text-[11px] text-rose-500 hover:text-rose-600 font-semibold cursor-pointer"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
+                    {t('delete_btn')}
                   </button>
                 </div>
               </div>
-
-              <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-300 flex items-start gap-2">
-                <Stethoscope className="w-4 h-4 text-teal-500 shrink-0 mt-0.5" />
-                <span>{sh.vitalsOrNotes}</span>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>
   );
 };
-

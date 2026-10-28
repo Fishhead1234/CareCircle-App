@@ -1,4 +1,5 @@
 import { ExpenseCategory, ReceiptLineItem } from '../types/care';
+import { AppLanguage } from '../i18n/translations';
 
 export interface ExtractedReceiptResult {
   providerName: string;
@@ -19,25 +20,24 @@ export interface SampleReceiptPreset {
   result: ExtractedReceiptResult;
 }
 
-export const SAMPLE_RECEIPT_PRESETS: SampleReceiptPreset[] = [
+const SAMPLE_PRESETS_ZH_TW: SampleReceiptPreset[] = [
   {
     id: 'sample_hospital',
-    title: 'Hospital Cardiology & Lab Bill',
-    subtitle: 'UCSF Medical Center • $845.00 (3 CPT items)',
-    badge: 'Hospital / Labs',
+    title: '台大醫院門診與檢驗收據',
+    subtitle: '台大醫院 • $845.00（3 項明細）',
+    badge: '醫院門診',
     result: {
-      providerName: 'UCSF Senior Cardiology & Outpatient Clinic',
+      providerName: '台大醫院 — 心臟內科門診與抽血檢查',
       date: new Date().toISOString().split('T')[0],
       category: 'HOSPITAL_CLINIC',
       totalAmount: 845.0,
       isTaxDeductible: true,
       aiConfidence: 99,
-      notes: 'Extracted from UCSF Outpatient Statement: Cardiology consult, 12-lead ECG, and comprehensive metabolic panel.',
+      notes: '心臟內科回診、12導程心電圖與血脂血糖抽血檢驗。',
       lineItems: [
         {
           id: 'li_s1',
-          description: 'Cardiology Specialist Consultation (Level 4)',
-          code: 'CPT-99214',
+          description: '心臟內科專科門診診察與部分負擔',
           quantity: 1,
           unitPrice: 340.0,
           total: 340.0,
@@ -46,8 +46,7 @@ export const SAMPLE_RECEIPT_PRESETS: SampleReceiptPreset[] = [
         },
         {
           id: 'li_s2',
-          description: 'Electrocardiogram (ECG/EKG) 12-Lead Tracing & Report',
-          code: 'CPT-93000',
+          description: '12導程心電圖檢查 (ECG)',
           quantity: 1,
           unitPrice: 285.0,
           total: 285.0,
@@ -56,8 +55,7 @@ export const SAMPLE_RECEIPT_PRESETS: SampleReceiptPreset[] = [
         },
         {
           id: 'li_s3',
-          description: 'Comprehensive Metabolic & Lipid Blood Panel',
-          code: 'CPT-80053',
+          description: '血液生化與血脂全套檢驗',
           quantity: 1,
           unitPrice: 220.0,
           total: 220.0,
@@ -69,22 +67,21 @@ export const SAMPLE_RECEIPT_PRESETS: SampleReceiptPreset[] = [
   },
   {
     id: 'sample_pharmacy',
-    title: 'CVS Pharmacy Rx & Supplies Receipt',
-    subtitle: 'CVS Pharmacy #2918 • $182.40 (3 items)',
-    badge: 'Pharmacy Rx',
+    title: '躍獅藥局處方領藥與耗材',
+    subtitle: '躍獅藥局 • $182.40（3 項明細）',
+    badge: '藥局處方',
     result: {
-      providerName: 'CVS Pharmacy #2918 — Senior Care Rx',
+      providerName: '躍獅連鎖藥局 — 慢性病處方領藥',
       date: new Date().toISOString().split('T')[0],
       category: 'PHARMACY_MEDS',
       totalAmount: 182.4,
       isTaxDeductible: true,
       aiConfidence: 98,
-      notes: 'Extracted Rx copays and diabetic lancets/alcohol prep pads.',
+      notes: '慢性病處方藥部分負擔與採血針、酒精棉片。',
       lineItems: [
         {
           id: 'li_p1',
-          description: 'Jardiance (Empagliflozin) 10mg Tablets (30-Day)',
-          code: 'NDC-0597-0152',
+          description: '恩排糖 (Jardiance 10mg) 30天份',
           quantity: 1,
           unitPrice: 125.0,
           total: 125.0,
@@ -93,8 +90,7 @@ export const SAMPLE_RECEIPT_PRESETS: SampleReceiptPreset[] = [
         },
         {
           id: 'li_p2',
-          description: 'Atorvastatin Calcium 20mg (90-Day Supply)',
-          code: 'NDC-0093-5057',
+          description: '立普妥 (Atorvastatin 20mg) 降膽固醇藥',
           quantity: 1,
           unitPrice: 18.4,
           total: 18.4,
@@ -103,8 +99,7 @@ export const SAMPLE_RECEIPT_PRESETS: SampleReceiptPreset[] = [
         },
         {
           id: 'li_p3',
-          description: 'OneTouch Delica Plus Lancets & Sterile Alcohol Swabs',
-          code: 'HCPCS-A4259',
+          description: '血糖採血針與無菌酒精棉片組',
           quantity: 2,
           unitPrice: 19.5,
           total: 39.0,
@@ -116,22 +111,21 @@ export const SAMPLE_RECEIPT_PRESETS: SampleReceiptPreset[] = [
   },
   {
     id: 'sample_caregiver',
-    title: 'In-Home Caregiver Weekly Invoice',
-    subtitle: 'Visiting Angels Senior Care • $420.00 (12 hrs)',
-    badge: 'Caregiver Hours',
+    title: '居家看護單週服務收據',
+    subtitle: '安心居家長照 • $420.00（12 小時）',
+    badge: '居家看護',
     result: {
-      providerName: 'Visiting Angels In-Home Senior Care',
+      providerName: '安心居家長照機構',
       date: new Date().toISOString().split('T')[0],
       category: 'IN_HOME_CAREGIVER',
       totalAmount: 420.0,
       isTaxDeductible: true,
       aiConfidence: 97,
-      notes: '12 hours personal care aide: bathing safety, medication reminders, and mobility support.',
+      notes: '12小時居家照服員：協助沐浴、服藥提醒與復健陪同。',
       lineItems: [
         {
           id: 'li_c1',
-          description: 'Certified Home Care Aide — ADL & Mobility Assistance (12 hrs @ $35/hr)',
-          code: 'HCPCS-T1019',
+          description: '居家照顧服務費 (12小時 @ $35/時)',
           quantity: 12,
           unitPrice: 35.0,
           total: 420.0,
@@ -143,22 +137,21 @@ export const SAMPLE_RECEIPT_PRESETS: SampleReceiptPreset[] = [
   },
   {
     id: 'sample_rehab',
-    title: 'Outpatient Physical Therapy Session',
-    subtitle: 'Golden Gate Rehab & PT • $260.00 (2 CPT items)',
-    badge: 'Therapy / Rehab',
+    title: '復健物理治療診所收據',
+    subtitle: '康健物理治療所 • $260.00（2 項明細）',
+    badge: '復健物理治療',
     result: {
-      providerName: 'Golden Gate Orthopedic Physical Therapy',
+      providerName: '康健骨科物理治療診所',
       date: new Date().toISOString().split('T')[0],
       category: 'THERAPY_REHAB',
       totalAmount: 260.0,
       isTaxDeductible: true,
       aiConfidence: 98,
-      notes: 'Post-hip surgery gait training and neuromuscular re-education.',
+      notes: '髖關節術後步態訓練與平衡復健治療。',
       lineItems: [
         {
           id: 'li_r1',
-          description: 'Gait Training & Ambulation Therapy (30 mins)',
-          code: 'CPT-97116',
+          description: '一對一術後步態與肌力復健訓練',
           quantity: 2,
           unitPrice: 85.0,
           total: 170.0,
@@ -167,8 +160,7 @@ export const SAMPLE_RECEIPT_PRESETS: SampleReceiptPreset[] = [
         },
         {
           id: 'li_r2',
-          description: 'Neuromuscular Balance Re-Education',
-          code: 'CPT-97112',
+          description: '平衡感與關節活動度物理治療',
           quantity: 1,
           unitPrice: 90.0,
           total: 90.0,
@@ -180,18 +172,174 @@ export const SAMPLE_RECEIPT_PRESETS: SampleReceiptPreset[] = [
   },
 ];
 
+const SAMPLE_PRESETS_EN: SampleReceiptPreset[] = [
+  {
+    id: 'sample_hospital',
+    title: 'Hospital Cardiology & Lab Bill',
+    subtitle: 'UCSF Medical Center • $845.00 (3 items)',
+    badge: 'Hospital',
+    result: {
+      providerName: 'UCSF Senior Cardiology Clinic',
+      date: new Date().toISOString().split('T')[0],
+      category: 'HOSPITAL_CLINIC',
+      totalAmount: 845.0,
+      isTaxDeductible: true,
+      aiConfidence: 99,
+      notes: 'Cardiology consult, ECG, and blood panel.',
+      lineItems: [
+        {
+          id: 'li_s1',
+          description: 'Cardiology Specialist Consultation',
+          quantity: 1,
+          unitPrice: 340.0,
+          total: 340.0,
+          isInsuranceEligible: true,
+          isTaxDeductible: true,
+        },
+        {
+          id: 'li_s2',
+          description: 'Electrocardiogram (ECG) Test',
+          quantity: 1,
+          unitPrice: 285.0,
+          total: 285.0,
+          isInsuranceEligible: true,
+          isTaxDeductible: true,
+        },
+        {
+          id: 'li_s3',
+          description: 'Metabolic & Lipid Blood Panel',
+          quantity: 1,
+          unitPrice: 220.0,
+          total: 220.0,
+          isInsuranceEligible: true,
+          isTaxDeductible: true,
+        },
+      ],
+    },
+  },
+  {
+    id: 'sample_pharmacy',
+    title: 'CVS Pharmacy Rx & Supplies',
+    subtitle: 'CVS Pharmacy • $182.40 (3 items)',
+    badge: 'Pharmacy',
+    result: {
+      providerName: 'CVS Pharmacy #2918',
+      date: new Date().toISOString().split('T')[0],
+      category: 'PHARMACY_MEDS',
+      totalAmount: 182.4,
+      isTaxDeductible: true,
+      aiConfidence: 98,
+      notes: 'Prescription meds and glucose lancets.',
+      lineItems: [
+        {
+          id: 'li_p1',
+          description: 'Jardiance 10mg Tablets (30-Day)',
+          quantity: 1,
+          unitPrice: 125.0,
+          total: 125.0,
+          isInsuranceEligible: true,
+          isTaxDeductible: true,
+        },
+        {
+          id: 'li_p2',
+          description: 'Atorvastatin 20mg Tablets',
+          quantity: 1,
+          unitPrice: 18.4,
+          total: 18.4,
+          isInsuranceEligible: true,
+          isTaxDeductible: true,
+        },
+        {
+          id: 'li_p3',
+          description: 'Lancets & Alcohol Prep Pads',
+          quantity: 2,
+          unitPrice: 19.5,
+          total: 39.0,
+          isInsuranceEligible: true,
+          isTaxDeductible: true,
+        },
+      ],
+    },
+  },
+  {
+    id: 'sample_caregiver',
+    title: 'In-Home Caregiver Receipt',
+    subtitle: 'Visiting Angels • $420.00 (12 hrs)',
+    badge: 'Caregiver',
+    result: {
+      providerName: 'Visiting Angels Home Care',
+      date: new Date().toISOString().split('T')[0],
+      category: 'IN_HOME_CAREGIVER',
+      totalAmount: 420.0,
+      isTaxDeductible: true,
+      aiConfidence: 97,
+      notes: '12 hours personal care assistance.',
+      lineItems: [
+        {
+          id: 'li_c1',
+          description: 'Home Caregiver Shift (12 hrs @ $35/hr)',
+          quantity: 12,
+          unitPrice: 35.0,
+          total: 420.0,
+          isInsuranceEligible: false,
+          isTaxDeductible: true,
+        },
+      ],
+    },
+  },
+  {
+    id: 'sample_rehab',
+    title: 'Physical Therapy Session',
+    subtitle: 'Golden Gate PT • $260.00 (2 items)',
+    badge: 'Rehab',
+    result: {
+      providerName: 'Golden Gate Physical Therapy',
+      date: new Date().toISOString().split('T')[0],
+      category: 'THERAPY_REHAB',
+      totalAmount: 260.0,
+      isTaxDeductible: true,
+      aiConfidence: 98,
+      notes: 'Post-hip surgery walking & balance therapy.',
+      lineItems: [
+        {
+          id: 'li_r1',
+          description: 'Gait & Walking Training (2 sessions)',
+          quantity: 2,
+          unitPrice: 85.0,
+          total: 170.0,
+          isInsuranceEligible: true,
+          isTaxDeductible: true,
+        },
+        {
+          id: 'li_r2',
+          description: 'Balance Re-Education Exercise',
+          quantity: 1,
+          unitPrice: 90.0,
+          total: 90.0,
+          isInsuranceEligible: true,
+          isTaxDeductible: true,
+        },
+      ],
+    },
+  },
+];
+
+export const getSampleReceiptPresets = (lang: AppLanguage = 'zh-TW'): SampleReceiptPreset[] => {
+  if (lang === 'en') return SAMPLE_PRESETS_EN;
+  return SAMPLE_PRESETS_ZH_TW;
+};
+
+export const SAMPLE_RECEIPT_PRESETS = SAMPLE_PRESETS_ZH_TW;
+
 export const aiReceiptService = {
-  /**
-   * Extracts structured medical bill / pharmacy receipt line items from a base64 image
-   * using Gemini 3.8 Flash (`gemini-3.8-flash`) when an API key is configured,
-   * with automatic fallback so offline/local scanning always succeeds.
-   */
   async analyzeReceiptImage(
     imageDataUrl: string,
     fileName: string,
-    geminiApiKey?: string
+    geminiApiKey?: string,
+    lang: AppLanguage = 'zh-TW'
   ): Promise<ExtractedReceiptResult> {
     const cleanKey = geminiApiKey?.trim();
+    const presets = getSampleReceiptPresets(lang);
 
     if (cleanKey && imageDataUrl.startsWith('data:image/')) {
       try {
@@ -200,8 +348,19 @@ export const aiReceiptService = {
           const mimeType = mimeMatch[1];
           const base64Data = mimeMatch[2];
 
-          const prompt = `You are a medical billing and healthcare receipt OCR specialist.
-Extract the receipt or medical bill details from this image and return ONLY valid JSON matching this exact structure:
+          const langInstruction =
+            lang === 'zh-TW'
+              ? 'Use Traditional Chinese (繁體中文) for providerName, notes, and item descriptions.'
+              : lang === 'zh-CN'
+              ? 'Use Simplified Chinese (简体中文) for providerName, notes, and item descriptions.'
+              : lang === 'ja'
+              ? 'Use Japanese (日本語) for providerName, notes, and item descriptions.'
+              : lang === 'ko'
+              ? 'Use Korean (한국어) for providerName, notes, and item descriptions.'
+              : 'Use clear, simple English.';
+
+          const prompt = `You are a helpful family medical receipt reader. ${langInstruction}
+Extract the receipt details from this image and return ONLY valid JSON matching this exact structure:
 {
   "providerName": "Clinic, Hospital, or Pharmacy Name",
   "date": "YYYY-MM-DD",
@@ -209,12 +368,11 @@ Extract the receipt or medical bill details from this image and return ONLY vali
   "totalAmount": number,
   "isTaxDeductible": boolean,
   "aiConfidence": number,
-  "notes": "Brief 1-sentence summary of the visit or purchase",
+  "notes": "Short 1-sentence summary",
   "lineItems": [
     {
       "id": "li_1",
-      "description": "Item or procedure description",
-      "code": "CPT/HCPCS/NDC code if visible or relevant code",
+      "description": "Simple item description",
       "quantity": number,
       "unitPrice": number,
       "total": number,
@@ -264,11 +422,10 @@ Extract the receipt or medical bill details from this image and return ONLY vali
                   totalAmount: Number(parsed.totalAmount) || 0,
                   isTaxDeductible: Boolean(parsed.isTaxDeductible ?? true),
                   aiConfidence: Number(parsed.aiConfidence) || 96,
-                  notes: parsed.notes || 'Extracted via Gemini 3.8 Flash Vision OCR',
+                  notes: parsed.notes || '',
                   lineItems: parsed.lineItems.map((li: any, idx: number) => ({
                     id: `li_${Date.now()}_${idx}`,
-                    description: String(li.description || 'Medical Item'),
-                    code: String(li.code || 'MED-01'),
+                    description: String(li.description || 'Item'),
                     quantity: Number(li.quantity) || 1,
                     unitPrice: Number(li.unitPrice) || Number(li.total) || 0,
                     total: Number(li.total) || 0,
@@ -281,23 +438,21 @@ Extract the receipt or medical bill details from this image and return ONLY vali
           }
         }
       } catch (err) {
-        console.warn('Gemini live receipt OCR fallback triggered:', err);
+        console.warn('Gemini receipt OCR fallback triggered:', err);
       }
     }
 
-    // Intelligent local filename / image heuristic fallback for instant offline operation
-    await new Promise((r) => setTimeout(r, 950));
+    await new Promise((r) => setTimeout(r, 750));
     const lower = fileName.toLowerCase();
-    if (lower.includes('pharm') || lower.includes('cvs') || lower.includes('walgreen') || lower.includes('rx')) {
-      return SAMPLE_RECEIPT_PRESETS[1].result;
+    if (lower.includes('pharm') || lower.includes('cvs') || lower.includes('rx')) {
+      return presets[1].result;
     }
-    if (lower.includes('care') || lower.includes('nurse') || lower.includes('shift')) {
-      return SAMPLE_RECEIPT_PRESETS[2].result;
+    if (lower.includes('care') || lower.includes('nurse')) {
+      return presets[2].result;
     }
-    if (lower.includes('pt') || lower.includes('therapy') || lower.includes('rehab')) {
-      return SAMPLE_RECEIPT_PRESETS[3].result;
+    if (lower.includes('pt') || lower.includes('rehab')) {
+      return presets[3].result;
     }
-    return SAMPLE_RECEIPT_PRESETS[0].result;
+    return presets[0].result;
   },
 };
-

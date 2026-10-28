@@ -9,13 +9,15 @@ import {
   MemberBalanceSummary,
   SuggestedSettlement,
 } from '../types/care';
+import { AppLanguage, TRANSLATIONS } from '../i18n/translations';
 
-export type AppTab = 'hub' | 'carelog' | 'reports' | 'settings';
+export type AppTab = 'hub' | 'carelog' | 'settings';
 
 export const ADMIN_PASSCODES = ['admin888', 'invest2026'];
 
 interface CareStoreState {
   activeTab: AppTab;
+  language: AppLanguage;
   themeMode: 'light' | 'dark';
   currencySymbol: string;
   geminiApiKey: string;
@@ -30,8 +32,10 @@ interface CareStoreState {
   shifts: CaregiverShift[];
   medications: MedicationSchedule[];
 
-  // Navigation & UI
+  // Navigation, i18n & UI
   setActiveTab: (tab: AppTab) => void;
+  setLanguage: (lang: AppLanguage) => void;
+  t: (key: string, fallback?: string) => string;
   toggleTheme: () => void;
   setGeminiApiKey: (key: string) => void;
   unlockAdmin: (passcode: string) => boolean;
@@ -69,277 +73,530 @@ interface CareStoreState {
   clearAllData: () => void;
 }
 
-const STORAGE_KEY = 'carecircle_family_hub_v1';
+const STORAGE_KEY = 'carecircle_family_hub_v2';
 
-const DEFAULT_RECIPIENT: CareRecipientProfile = {
-  name: 'Eleanor Vance-Chen',
-  preferredName: 'Mom (Eleanor)',
-  age: 78,
-  dateOfBirth: '1948-04-12',
-  bloodType: 'O+',
-  primaryConditions: ['Post-Hip Arthroplasty Recovery', 'Hypertension (Stage 1)', 'Type 2 Diabetes'],
-  allergies: ['Penicillin', 'Sulfa Drugs'],
-  primaryPhysician: 'Dr. Marcus Lin, MD (Geriatrics & Internal Medicine)',
-  clinicPhone: '(415) 890-4420',
-  insuranceProvider: 'Medicare Part A/B + BlueShield Medigap Plan G',
-  policyNumber: 'MCR-994-8210-A',
-  groupNumber: 'BS-GRP-40291',
+const DEMO_DATA_ZH_TW = {
+  recipient: {
+    name: '陳林淑芬 (媽媽)',
+    preferredName: '媽媽 (陳林淑芬)',
+    age: 78,
+    dateOfBirth: '1948-04-12',
+    bloodType: 'O+',
+    primaryConditions: ['人工髖關節術後復健', '高血壓', '第二型糖尿病'],
+    allergies: ['盤尼西林 (Penicillin)'],
+    primaryPhysician: '台大醫院 老年醫學部 林志豪醫師',
+    clinicPhone: '(02) 2312-3456',
+    insuranceProvider: '全民健保 + 富邦實支實付醫療險',
+    policyNumber: 'NHI-882910-TW',
+    groupNumber: 'FUBON-MED-209',
+  } as CareRecipientProfile,
+  members: [
+    {
+      id: 'mem_sarah',
+      name: '陳怡君 (大姐)',
+      relationship: '大姐（主要醫療聯絡人）',
+      avatarColor: '#0D9488',
+      splitPercentage: 40,
+      email: 'sarah.chen@example.com',
+      isPrimaryCoordinator: true,
+    },
+    {
+      id: 'mem_david',
+      name: '陳建宏 (大哥)',
+      relationship: '大哥（帳務分攤）',
+      avatarColor: '#2563EB',
+      splitPercentage: 40,
+      email: 'david.chen@example.com',
+    },
+    {
+      id: 'mem_emily',
+      name: '陳雅婷 (小妹)',
+      relationship: '小妹（陪同回診照顧）',
+      avatarColor: '#7C3AED',
+      splitPercentage: 20,
+      email: 'emily.park@example.com',
+    },
+  ] as FamilyMember[],
+  expenses: [
+    {
+      id: 'exp_1',
+      providerName: '台大醫院 — 骨科回診與X光檢查',
+      date: '2026-10-18',
+      category: 'HOSPITAL_CLINIC',
+      totalAmount: 1480,
+      insuranceReimbursedAmount: 620,
+      paidByMemberId: 'mem_sarah',
+      insuranceClaimStatus: 'REIMBURSED',
+      isTaxDeductible: true,
+      aiConfidence: 99,
+      notes: '髖關節術後回診、骨盆X光檢查與自費護具費。',
+      lineItems: [
+        {
+          id: 'li_101',
+          description: '骨科門診掛號與部分負擔',
+          quantity: 1,
+          unitPrice: 420,
+          total: 420,
+          isInsuranceEligible: true,
+          isTaxDeductible: true,
+        },
+        {
+          id: 'li_102',
+          description: '雙側髖關節數位 X 光檢查與耗材',
+          quantity: 1,
+          unitPrice: 680,
+          total: 680,
+          isInsuranceEligible: true,
+          isTaxDeductible: true,
+        },
+        {
+          id: 'li_103',
+          description: '術後醫療級髖關節固定護具',
+          quantity: 1,
+          unitPrice: 380,
+          total: 380,
+          isInsuranceEligible: true,
+          isTaxDeductible: true,
+        },
+      ],
+    },
+    {
+      id: 'exp_2',
+      providerName: '躍獅連鎖藥局 — 慢性病處方與血糖試紙',
+      date: '2026-10-21',
+      category: 'PHARMACY_MEDS',
+      totalAmount: 246.5,
+      insuranceReimbursedAmount: 0,
+      paidByMemberId: 'mem_david',
+      insuranceClaimStatus: 'SUBMITTED',
+      isTaxDeductible: true,
+      aiConfidence: 98,
+      notes: '抗凝血藥、降血壓藥與拜安進血糖試紙一盒。',
+      lineItems: [
+        {
+          id: 'li_201',
+          description: '艾必克凝 (Eliquis) 5mg 抗凝血處方藥',
+          quantity: 1,
+          unitPrice: 165,
+          total: 165,
+          isInsuranceEligible: true,
+          isTaxDeductible: true,
+        },
+        {
+          id: 'li_202',
+          description: '脈優 (降血壓藥) 30天份處方',
+          quantity: 1,
+          unitPrice: 24.5,
+          total: 24.5,
+          isInsuranceEligible: true,
+          isTaxDeductible: true,
+        },
+        {
+          id: 'li_203',
+          description: 'Contour 血糖機試紙 (100片裝)',
+          quantity: 1,
+          unitPrice: 57,
+          total: 57,
+          isInsuranceEligible: true,
+          isTaxDeductible: true,
+        },
+      ],
+    },
+    {
+      id: 'exp_3',
+      providerName: '安心居家長照機構 — 照顧服務員費',
+      date: '2026-10-24',
+      category: 'IN_HOME_CAREGIVER',
+      totalAmount: 560,
+      insuranceReimbursedAmount: 0,
+      paidByMemberId: 'mem_sarah',
+      insuranceClaimStatus: 'NOT_SUBMITTED',
+      isTaxDeductible: true,
+      aiConfidence: 97,
+      notes: '16小時居家照服員：協助沐浴、助行器復健散步與備餐。',
+      lineItems: [
+        {
+          id: 'li_301',
+          description: '居家照顧服務費 (16小時 @ $35/時)',
+          quantity: 16,
+          unitPrice: 35,
+          total: 560,
+          isInsuranceEligible: false,
+          isTaxDeductible: true,
+        },
+      ],
+    },
+    {
+      id: 'exp_4',
+      providerName: '杏一醫療用品 — 四輪助行車與浴室扶手',
+      date: '2026-10-26',
+      category: 'MEDICAL_SUPPLIES',
+      totalAmount: 315,
+      insuranceReimbursedAmount: 0,
+      paidByMemberId: 'mem_emily',
+      insuranceClaimStatus: 'SUBMITTED',
+      isTaxDeductible: true,
+      aiConfidence: 96,
+      notes: '鋁合金折疊四輪助行車、洗澡椅與防滑扶手。',
+      lineItems: [
+        {
+          id: 'li_401',
+          description: '輕量化鋁合金帶座四輪助行車',
+          quantity: 1,
+          unitPrice: 195,
+          total: 195,
+          isInsuranceEligible: true,
+          isTaxDeductible: true,
+        },
+        {
+          id: 'li_402',
+          description: '浴室防滑洗澡椅與安全扶手組',
+          quantity: 1,
+          unitPrice: 120,
+          total: 120,
+          isInsuranceEligible: false,
+          isTaxDeductible: true,
+        },
+      ],
+    },
+  ] as MedicalExpense[],
+  shifts: [
+    {
+      id: 'sh_1',
+      caregiverName: '林美玲 (居家照服員)',
+      role: '居家照服員',
+      date: '2026-10-24',
+      startTime: '08:00',
+      endTime: '16:00',
+      hours: 8,
+      hourlyRate: 35,
+      totalPay: 280,
+      paidByMemberId: 'mem_sarah',
+      tasksCompleted: ['量測血壓與血糖', '協助沐浴更衣', '髖關節復健運動', '準備低鹽午餐'],
+      vitalsOrNotes: '血壓 126/78 mmHg，空腹血糖 108 mg/dL。使用助行器步行穩定，精神良好。',
+      linkedExpenseId: 'exp_3',
+    },
+    {
+      id: 'sh_2',
+      caregiverName: '林美玲 (居家照服員)',
+      role: '居家照服員',
+      date: '2026-10-27',
+      startTime: '09:00',
+      endTime: '15:00',
+      hours: 6,
+      hourlyRate: 35,
+      totalPay: 210,
+      paidByMemberId: 'mem_david',
+      tasksCompleted: ['提醒按時服藥', '陪同至診所物理治療', '領取慢性病處方藥'],
+      vitalsOrNotes: '血壓 124/76 mmHg。完成 45 分鐘復健步態訓練。',
+    },
+  ] as CaregiverShift[],
+  medications: [
+    {
+      id: 'med_1',
+      name: '艾必克凝 (Eliquis 抗凝血藥)',
+      dosage: '5 mg (每次 1 顆)',
+      frequency: '早晚飯後各一次',
+      timeOfDay: ['08:00', '20:00'],
+      purpose: '預防術後血栓',
+      prescribingDoctor: '林志豪醫師',
+      pillsRemaining: 42,
+      refillThreshold: 14,
+      lastTakenAt: '今日 08:05',
+      lastAdministeredBy: '陳怡君 (大姐)',
+    },
+    {
+      id: 'med_2',
+      name: '脈優 (Norvasc 降血壓藥)',
+      dosage: '5 mg (每次 1 顆)',
+      frequency: '每日早上一次',
+      timeOfDay: ['08:00'],
+      purpose: '控制血壓穩定',
+      prescribingDoctor: '林志豪醫師',
+      pillsRemaining: 68,
+      refillThreshold: 15,
+      lastTakenAt: '今日 08:05',
+      lastAdministeredBy: '陳怡君 (大姐)',
+    },
+    {
+      id: 'med_3',
+      name: '庫魯化 (Metformin 降血糖藥)',
+      dosage: '500 mg (每次 1 顆)',
+      frequency: '早晚餐隨餐服用',
+      timeOfDay: ['08:30', '18:30'],
+      purpose: '控制血糖',
+      prescribingDoctor: '林志豪醫師',
+      pillsRemaining: 9,
+      refillThreshold: 14,
+      lastTakenAt: '今日 08:30',
+      lastAdministeredBy: '林美玲 (看護)',
+    },
+  ] as MedicationSchedule[],
 };
 
-const DEFAULT_MEMBERS: FamilyMember[] = [
-  {
-    id: 'mem_sarah',
-    name: 'Sarah Chen',
-    relationship: 'Eldest Daughter (Medical POA)',
-    avatarColor: '#0D9488',
-    splitPercentage: 40,
-    email: 'sarah.chen@example.com',
-    isPrimaryCoordinator: true,
-  },
-  {
-    id: 'mem_david',
-    name: 'David Chen',
-    relationship: 'Son (Financial Co-Coordinator)',
-    avatarColor: '#2563EB',
-    splitPercentage: 40,
-    email: 'david.chen@example.com',
-  },
-  {
-    id: 'mem_emily',
-    name: 'Emily Chen-Park',
-    relationship: 'Younger Daughter (Local Care Support)',
-    avatarColor: '#7C3AED',
-    splitPercentage: 20,
-    email: 'emily.park@example.com',
-  },
-];
+const DEMO_DATA_EN = {
+  recipient: {
+    name: 'Eleanor Vance-Chen (Mom)',
+    preferredName: 'Mom (Eleanor)',
+    age: 78,
+    dateOfBirth: '1948-04-12',
+    bloodType: 'O+',
+    primaryConditions: ['Post-Hip Surgery Recovery', 'Hypertension', 'Type 2 Diabetes'],
+    allergies: ['Penicillin'],
+    primaryPhysician: 'Dr. Marcus Lin, MD (UCSF Geriatrics)',
+    clinicPhone: '(415) 890-4420',
+    insuranceProvider: 'Medicare Part A/B + BlueShield Medigap',
+    policyNumber: 'MCR-994-8210-A',
+    groupNumber: 'BS-GRP-40291',
+  } as CareRecipientProfile,
+  members: [
+    {
+      id: 'mem_sarah',
+      name: 'Sarah Chen',
+      relationship: 'Eldest Sister (Coordinator)',
+      avatarColor: '#0D9488',
+      splitPercentage: 40,
+      email: 'sarah.chen@example.com',
+      isPrimaryCoordinator: true,
+    },
+    {
+      id: 'mem_david',
+      name: 'David Chen',
+      relationship: 'Brother',
+      avatarColor: '#2563EB',
+      splitPercentage: 40,
+      email: 'david.chen@example.com',
+    },
+    {
+      id: 'mem_emily',
+      name: 'Emily Chen',
+      relationship: 'Younger Sister',
+      avatarColor: '#7C3AED',
+      splitPercentage: 20,
+      email: 'emily.park@example.com',
+    },
+  ] as FamilyMember[],
+  expenses: [
+    {
+      id: 'exp_1',
+      providerName: 'St. Jude Orthopedic & Rehab Clinic',
+      date: '2026-10-18',
+      category: 'HOSPITAL_CLINIC',
+      totalAmount: 1480.0,
+      insuranceReimbursedAmount: 620.0,
+      paidByMemberId: 'mem_sarah',
+      insuranceClaimStatus: 'REIMBURSED',
+      isTaxDeductible: true,
+      aiConfidence: 99,
+      notes: 'Post-op hip follow-up, X-ray, and support brace.',
+      lineItems: [
+        {
+          id: 'li_101',
+          description: 'Orthopedic Specialist Visit',
+          quantity: 1,
+          unitPrice: 420.0,
+          total: 420.0,
+          isInsuranceEligible: true,
+          isTaxDeductible: true,
+        },
+        {
+          id: 'li_102',
+          description: 'Bilateral Hip X-Ray Exam',
+          quantity: 1,
+          unitPrice: 680.0,
+          total: 680.0,
+          isInsuranceEligible: true,
+          isTaxDeductible: true,
+        },
+        {
+          id: 'li_103',
+          description: 'Post-Op Hip Support Brace',
+          quantity: 1,
+          unitPrice: 380.0,
+          total: 380.0,
+          isInsuranceEligible: true,
+          isTaxDeductible: true,
+        },
+      ],
+    },
+    {
+      id: 'exp_2',
+      providerName: 'Walgreens Pharmacy',
+      date: '2026-10-21',
+      category: 'PHARMACY_MEDS',
+      totalAmount: 246.5,
+      insuranceReimbursedAmount: 0,
+      paidByMemberId: 'mem_david',
+      insuranceClaimStatus: 'SUBMITTED',
+      isTaxDeductible: true,
+      aiConfidence: 98,
+      notes: 'Monthly prescriptions & glucose test strips.',
+      lineItems: [
+        {
+          id: 'li_201',
+          description: 'Eliquis 5mg Tablets (60-Day)',
+          quantity: 1,
+          unitPrice: 165.0,
+          total: 165.0,
+          isInsuranceEligible: true,
+          isTaxDeductible: true,
+        },
+        {
+          id: 'li_202',
+          description: 'Lisinopril 10mg Tablets',
+          quantity: 1,
+          unitPrice: 24.5,
+          total: 24.5,
+          isInsuranceEligible: true,
+          isTaxDeductible: true,
+        },
+        {
+          id: 'li_203',
+          description: 'Contour Blood Glucose Test Strips',
+          quantity: 1,
+          unitPrice: 57.0,
+          total: 57.0,
+          isInsuranceEligible: true,
+          isTaxDeductible: true,
+        },
+      ],
+    },
+    {
+      id: 'exp_3',
+      providerName: 'ComfortHands Home Caregiver',
+      date: '2026-10-24',
+      category: 'IN_HOME_CAREGIVER',
+      totalAmount: 560.0,
+      insuranceReimbursedAmount: 0,
+      paidByMemberId: 'mem_sarah',
+      insuranceClaimStatus: 'NOT_SUBMITTED',
+      isTaxDeductible: true,
+      aiConfidence: 97,
+      notes: '16 hours home care assistance ($35/hr).',
+      lineItems: [
+        {
+          id: 'li_301',
+          description: 'In-Home Caregiver Shift (16 hrs @ $35/hr)',
+          quantity: 16,
+          unitPrice: 35.0,
+          total: 560.0,
+          isInsuranceEligible: false,
+          isTaxDeductible: true,
+        },
+      ],
+    },
+    {
+      id: 'exp_4',
+      providerName: 'MedLine Medical Supplies',
+      date: '2026-10-26',
+      category: 'MEDICAL_SUPPLIES',
+      totalAmount: 315.0,
+      insuranceReimbursedAmount: 0,
+      paidByMemberId: 'mem_emily',
+      insuranceClaimStatus: 'SUBMITTED',
+      isTaxDeductible: true,
+      aiConfidence: 96,
+      notes: 'Folding walker and shower transfer bench.',
+      lineItems: [
+        {
+          id: 'li_401',
+          description: 'Lightweight Folding Rollator Walker',
+          quantity: 1,
+          unitPrice: 195.0,
+          total: 195.0,
+          isInsuranceEligible: true,
+          isTaxDeductible: true,
+        },
+        {
+          id: 'li_402',
+          description: 'Shower Bench & Safety Grab Bars',
+          quantity: 1,
+          unitPrice: 120.0,
+          total: 120.0,
+          isInsuranceEligible: false,
+          isTaxDeductible: true,
+        },
+      ],
+    },
+  ] as MedicalExpense[],
+  shifts: [
+    {
+      id: 'sh_1',
+      caregiverName: 'Maria Santos (Caregiver)',
+      role: 'Home Care Aide',
+      date: '2026-10-24',
+      startTime: '08:00',
+      endTime: '16:00',
+      hours: 8,
+      hourlyRate: 35,
+      totalPay: 280,
+      paidByMemberId: 'mem_sarah',
+      tasksCompleted: ['Morning Vitals', 'Shower Assist', 'Walking Exercise', 'Lunch Prep'],
+      vitalsOrNotes: 'BP 126/78 mmHg, Glucose 108 mg/dL. Walked well with walker.',
+      linkedExpenseId: 'exp_3',
+    },
+    {
+      id: 'sh_2',
+      caregiverName: 'Maria Santos (Caregiver)',
+      role: 'Home Care Aide',
+      date: '2026-10-27',
+      startTime: '09:00',
+      endTime: '15:00',
+      hours: 6,
+      hourlyRate: 35,
+      totalPay: 210,
+      paidByMemberId: 'mem_david',
+      tasksCompleted: ['Meds Reminder', 'Outpatient PT Visit', 'Pharmacy Pickup'],
+      vitalsOrNotes: 'BP 124/76 mmHg. Good energy after PT session.',
+    },
+  ] as CaregiverShift[],
+  medications: [
+    {
+      id: 'med_1',
+      name: 'Eliquis (Blood Thinner)',
+      dosage: '5 mg (1 Pill)',
+      frequency: 'Morning & Night after meals',
+      timeOfDay: ['08:00', '20:00'],
+      purpose: 'Post-Surgery Clot Prevention',
+      prescribingDoctor: 'Dr. Marcus Lin',
+      pillsRemaining: 42,
+      refillThreshold: 14,
+      lastTakenAt: 'Today 08:05',
+      lastAdministeredBy: 'Sarah Chen',
+    },
+    {
+      id: 'med_2',
+      name: 'Lisinopril (Blood Pressure)',
+      dosage: '10 mg (1 Pill)',
+      frequency: 'Every Morning',
+      timeOfDay: ['08:00'],
+      purpose: 'Blood Pressure Control',
+      prescribingDoctor: 'Dr. Marcus Lin',
+      pillsRemaining: 68,
+      refillThreshold: 15,
+      lastTakenAt: 'Today 08:05',
+      lastAdministeredBy: 'Sarah Chen',
+    },
+    {
+      id: 'med_3',
+      name: 'Metformin (Blood Sugar)',
+      dosage: '500 mg (1 Pill)',
+      frequency: 'Twice Daily with meals',
+      timeOfDay: ['08:30', '18:30'],
+      purpose: 'Glucose Control',
+      prescribingDoctor: 'Dr. Marcus Lin',
+      pillsRemaining: 9,
+      refillThreshold: 14,
+      lastTakenAt: 'Today 08:30',
+      lastAdministeredBy: 'Maria Santos',
+    },
+  ] as MedicationSchedule[],
+};
 
-const DEFAULT_EXPENSES: MedicalExpense[] = [
-  {
-    id: 'exp_1',
-    providerName: 'St. Jude Orthopedic & Rehabilitation Center',
-    date: '2026-10-18',
-    category: 'HOSPITAL_CLINIC',
-    totalAmount: 1480.0,
-    insuranceReimbursedAmount: 620.0,
-    paidByMemberId: 'mem_sarah',
-    insuranceClaimStatus: 'REIMBURSED',
-    isTaxDeductible: true,
-    aiConfidence: 99,
-    notes: 'Post-op orthopedic follow-up, pelvic X-ray series, and wound dressing evaluation.',
-    lineItems: [
-      {
-        id: 'li_101',
-        description: 'Orthopedic Specialist Follow-Up Level 4',
-        code: 'CPT-99214',
-        quantity: 1,
-        unitPrice: 420.0,
-        total: 420.0,
-        isInsuranceEligible: true,
-        isTaxDeductible: true,
-      },
-      {
-        id: 'li_102',
-        description: 'Radiologic Exam, Hip Bilateral (2 Views)',
-        code: 'CPT-73502',
-        quantity: 1,
-        unitPrice: 680.0,
-        total: 680.0,
-        isInsuranceEligible: true,
-        isTaxDeductible: true,
-      },
-      {
-        id: 'li_103',
-        description: 'Post-Op Cryotherapy Hip Support Brace',
-        code: 'HCPCS-L1686',
-        quantity: 1,
-        unitPrice: 380.0,
-        total: 380.0,
-        isInsuranceEligible: true,
-        isTaxDeductible: true,
-      },
-    ],
-  },
-  {
-    id: 'exp_2',
-    providerName: 'Walgreens Specialty Pharmacy #4102',
-    date: '2026-10-21',
-    category: 'PHARMACY_MEDS',
-    totalAmount: 246.5,
-    insuranceReimbursedAmount: 0,
-    paidByMemberId: 'mem_david',
-    insuranceClaimStatus: 'SUBMITTED',
-    isTaxDeductible: true,
-    aiConfidence: 98,
-    notes: 'Monthly blood thinner, blood pressure, and glucose test strips refill.',
-    lineItems: [
-      {
-        id: 'li_201',
-        description: 'Eliquis (Apixaban) 5mg Tablets (60-Day Supply)',
-        code: 'NDC-0003-0894',
-        quantity: 1,
-        unitPrice: 165.0,
-        total: 165.0,
-        isInsuranceEligible: true,
-        isTaxDeductible: true,
-      },
-      {
-        id: 'li_202',
-        description: 'Lisinopril 10mg Tablets (90 Count)',
-        code: 'NDC-0093-1040',
-        quantity: 1,
-        unitPrice: 24.5,
-        total: 24.5,
-        isInsuranceEligible: true,
-        isTaxDeductible: true,
-      },
-      {
-        id: 'li_203',
-        description: 'Contour Next Blood Glucose Test Strips (100pk)',
-        code: 'NDC-0193-7312',
-        quantity: 1,
-        unitPrice: 57.0,
-        total: 57.0,
-        isInsuranceEligible: true,
-        isTaxDeductible: true,
-      },
-    ],
-  },
-  {
-    id: 'exp_3',
-    providerName: 'ComfortHands Senior Home Care Agency',
-    date: '2026-10-24',
-    category: 'IN_HOME_CAREGIVER',
-    totalAmount: 560.0,
-    insuranceReimbursedAmount: 0,
-    paidByMemberId: 'mem_sarah',
-    insuranceClaimStatus: 'NOT_SUBMITTED',
-    isTaxDeductible: true,
-    aiConfidence: 97,
-    notes: '16 hours Certified Nursing Assistant (CNA) mobility & bathing assistance ($35/hr).',
-    lineItems: [
-      {
-        id: 'li_301',
-        description: 'In-Home CNA Personal Care & Mobility Assist (16 hrs @ $35/hr)',
-        code: 'HCPCS-T1019',
-        quantity: 16,
-        unitPrice: 35.0,
-        total: 560.0,
-        isInsuranceEligible: false,
-        isTaxDeductible: true,
-      },
-    ],
-  },
-  {
-    id: 'exp_4',
-    providerName: 'MedLine Home Medical Equipment',
-    date: '2026-10-26',
-    category: 'MEDICAL_SUPPLIES',
-    totalAmount: 315.0,
-    insuranceReimbursedAmount: 0,
-    paidByMemberId: 'mem_emily',
-    insuranceClaimStatus: 'SUBMITTED',
-    isTaxDeductible: true,
-    aiConfidence: 96,
-    notes: 'Folding rollator walker with seat, shower transfer bench, and grab bars.',
-    lineItems: [
-      {
-        id: 'li_401',
-        description: 'Lightweight Folding Rollator Walker w/ Hand Brakes',
-        code: 'HCPCS-E0143',
-        quantity: 1,
-        unitPrice: 195.0,
-        total: 195.0,
-        isInsuranceEligible: true,
-        isTaxDeductible: true,
-      },
-      {
-        id: 'li_402',
-        description: 'Padded Tub Transfer Bench & Suction Grab Bar Kit',
-        code: 'HCPCS-E0247',
-        quantity: 1,
-        unitPrice: 120.0,
-        total: 120.0,
-        isInsuranceEligible: false,
-        isTaxDeductible: true,
-      },
-    ],
-  },
-];
-
-const DEFAULT_SHIFTS: CaregiverShift[] = [
-  {
-    id: 'sh_1',
-    caregiverName: 'Maria Santos, CNA',
-    role: 'Certified Home Health Aide',
-    date: '2026-10-24',
-    startTime: '08:00',
-    endTime: '16:00',
-    hours: 8,
-    hourlyRate: 35,
-    totalPay: 280,
-    paidByMemberId: 'mem_sarah',
-    tasksCompleted: ['Morning Vitals & Glucose Check', 'Assisted Shower & Dressing', 'Hip PT Range-of-Motion Exercises', 'Low-Sodium Lunch Prep'],
-    vitalsOrNotes: 'BP 126/78 mmHg, Fasting Glucose 108 mg/dL. Walked 150 ft with rollator without hip discomfort.',
-    linkedExpenseId: 'exp_3',
-  },
-  {
-    id: 'sh_2',
-    caregiverName: 'Maria Santos, CNA',
-    role: 'Certified Home Health Aide',
-    date: '2026-10-27',
-    startTime: '09:00',
-    endTime: '15:00',
-    hours: 6,
-    hourlyRate: 35,
-    totalPay: 210,
-    paidByMemberId: 'mem_david',
-    tasksCompleted: ['Medication Administration', 'Accompanied to Outpatient PT', 'Grocery & Pharmacy Pickup'],
-    vitalsOrNotes: 'BP 124/76 mmHg. Completed 45-min outpatient physical therapy session with good balance.',
-  },
-];
-
-const DEFAULT_MEDICATIONS: MedicationSchedule[] = [
-  {
-    id: 'med_1',
-    name: 'Eliquis (Apixaban)',
-    dosage: '5 mg (1 Tablet)',
-    frequency: 'Twice Daily (With Water)',
-    timeOfDay: ['08:00 AM', '08:00 PM'],
-    purpose: 'Post-Surgery DVT / Blood Clot Prevention',
-    prescribingDoctor: 'Dr. Marcus Lin, MD',
-    pillsRemaining: 42,
-    refillThreshold: 14,
-    lastTakenAt: 'Today, 08:05 AM',
-    lastAdministeredBy: 'Sarah Chen',
-  },
-  {
-    id: 'med_2',
-    name: 'Lisinopril',
-    dosage: '10 mg (1 Tablet)',
-    frequency: 'Once Daily (Morning)',
-    timeOfDay: ['08:00 AM'],
-    purpose: 'Blood Pressure Management',
-    prescribingDoctor: 'Dr. Marcus Lin, MD',
-    pillsRemaining: 68,
-    refillThreshold: 15,
-    lastTakenAt: 'Today, 08:05 AM',
-    lastAdministeredBy: 'Sarah Chen',
-  },
-  {
-    id: 'med_3',
-    name: 'Metformin HCl ER',
-    dosage: '500 mg (1 Tablet)',
-    frequency: 'Twice Daily (With Meals)',
-    timeOfDay: ['08:30 AM', '06:30 PM'],
-    purpose: 'Blood Glucose Control',
-    prescribingDoctor: 'Dr. Marcus Lin, MD',
-    pillsRemaining: 9,
-    refillThreshold: 14,
-    lastTakenAt: 'Today, 08:30 AM',
-    lastAdministeredBy: 'Maria Santos, CNA',
-  },
-];
+const getDemoDataset = (lang: AppLanguage) => {
+  if (lang === 'en') return DEMO_DATA_EN;
+  return DEMO_DATA_ZH_TW;
+};
 
 const loadInitialState = () => {
   try {
@@ -355,6 +612,8 @@ const loadInitialState = () => {
 
 export const useCareStore = create<CareStoreState>((set, get) => {
   const saved = loadInitialState();
+  const initialLang: AppLanguage = saved?.language || 'zh-TW';
+  const initialDemo = getDemoDataset(initialLang);
 
   const persist = () => {
     try {
@@ -362,6 +621,7 @@ export const useCareStore = create<CareStoreState>((set, get) => {
       localStorage.setItem(
         STORAGE_KEY,
         JSON.stringify({
+          language: s.language,
           themeMode: s.themeMode,
           currencySymbol: s.currencySymbol,
           geminiApiKey: s.geminiApiKey,
@@ -383,6 +643,7 @@ export const useCareStore = create<CareStoreState>((set, get) => {
 
   return {
     activeTab: 'hub',
+    language: initialLang,
     themeMode: saved?.themeMode || 'light',
     currencySymbol: saved?.currencySymbol || '$',
     geminiApiKey: saved?.geminiApiKey || '',
@@ -390,14 +651,43 @@ export const useCareStore = create<CareStoreState>((set, get) => {
     isAdmin: saved?.isAdmin ?? false,
     trialStartDate: saved?.trialStartDate || new Date().toISOString(),
 
-    recipient: saved?.recipient || DEFAULT_RECIPIENT,
-    members: saved?.members || DEFAULT_MEMBERS,
-    expenses: saved?.expenses || DEFAULT_EXPENSES,
+    recipient: saved?.recipient || initialDemo.recipient,
+    members: saved?.members || initialDemo.members,
+    expenses: saved?.expenses || initialDemo.expenses,
     settlements: saved?.settlements || [],
-    shifts: saved?.shifts || DEFAULT_SHIFTS,
-    medications: saved?.medications || DEFAULT_MEDICATIONS,
+    shifts: saved?.shifts || initialDemo.shifts,
+    medications: saved?.medications || initialDemo.medications,
 
     setActiveTab: (tab) => set({ activeTab: tab }),
+
+    setLanguage: (lang) => {
+      const current = get();
+      // If using default demo recipient, also switch sample data language so the user sees localized bills
+      const isStillDemoRecipient =
+        current.recipient.name === DEMO_DATA_ZH_TW.recipient.name ||
+        current.recipient.name === DEMO_DATA_EN.recipient.name ||
+        current.recipient.name === 'Eleanor Vance-Chen';
+
+      if (isStillDemoRecipient && current.expenses.length <= 5) {
+        const nextDemo = getDemoDataset(lang);
+        set({
+          language: lang,
+          recipient: nextDemo.recipient,
+          members: nextDemo.members,
+          expenses: nextDemo.expenses,
+          shifts: nextDemo.shifts,
+          medications: nextDemo.medications,
+        });
+      } else {
+        set({ language: lang });
+      }
+      persist();
+    },
+
+    t: (key, fallback) => {
+      const lang = get().language || 'zh-TW';
+      return TRANSLATIONS[lang]?.[key] || TRANSLATIONS['en']?.[key] || fallback || key;
+    },
 
     toggleTheme: () => {
       set((state) => ({
@@ -518,7 +808,7 @@ export const useCareStore = create<CareStoreState>((set, get) => {
 
       if (autoCreateExpense && shift.totalPay > 0) {
         linkedExpenseId = get().addExpense({
-          providerName: `${shift.caregiverName} (${shift.role})`,
+          providerName: shift.caregiverName,
           date: shift.date,
           category: 'IN_HOME_CAREGIVER',
           totalAmount: shift.totalPay,
@@ -526,12 +816,11 @@ export const useCareStore = create<CareStoreState>((set, get) => {
           paidByMemberId: shift.paidByMemberId,
           insuranceClaimStatus: 'NOT_SUBMITTED',
           isTaxDeductible: true,
-          notes: `Shift ${shift.startTime}–${shift.endTime} (${shift.hours} hrs @ $${shift.hourlyRate}/hr). ${shift.vitalsOrNotes}`,
+          notes: `${shift.hours}h @ $${shift.hourlyRate}/hr. ${shift.vitalsOrNotes}`,
           lineItems: [
             {
               id: `li_${Date.now()}`,
-              description: `In-Home Care Shift (${shift.hours} hrs @ $${shift.hourlyRate}/hr) — ${shift.tasksCompleted.join(', ')}`,
-              code: 'HCPCS-T1019',
+              description: `${shift.caregiverName} (${shift.hours}h @ $${shift.hourlyRate}/hr)`,
               quantity: shift.hours,
               unitPrice: shift.hourlyRate,
               total: shift.totalPay,
@@ -580,7 +869,7 @@ export const useCareStore = create<CareStoreState>((set, get) => {
             ? {
                 ...m,
                 pillsRemaining: Math.max(0, m.pillsRemaining - 1),
-                lastTakenAt: `Today, ${nowStr}`,
+                lastTakenAt: `${nowStr}`,
                 lastAdministeredBy: administeredBy,
               }
             : m
@@ -611,7 +900,6 @@ export const useCareStore = create<CareStoreState>((set, get) => {
       const { members, expenses, settlements } = get();
       const totalSplitWeight = members.reduce((acc, m) => acc + (m.splitPercentage || 0), 0) || 100;
 
-      // Net shared pool cost = sum of (totalAmount - insuranceReimbursedAmount)
       const totalNetPoolExpense = expenses.reduce(
         (sum, exp) => sum + Math.max(0, exp.totalAmount - (exp.insuranceReimbursedAmount || 0)),
         0
@@ -637,10 +925,6 @@ export const useCareStore = create<CareStoreState>((set, get) => {
           .filter((s) => s.toMemberId === member.id)
           .reduce((acc, s) => acc + s.amount, 0);
 
-        // If a member paid $1,000 out of pocket, their assigned share is $600,
-        // and they haven't received settlements yet -> netBalance = +$400 (pool owes them $400).
-        // If they paid $100 out of pocket, assigned share is $400, and they sent $300 settlement ->
-        // netBalance = (100 + 300 - 0) - 400 = $0.
         const netBalance =
           netOutOfPocketPaid + settlementsPaidOut - settlementsReceived - assignedShare;
 
@@ -703,7 +987,8 @@ export const useCareStore = create<CareStoreState>((set, get) => {
       return JSON.stringify(
         {
           app: 'CareCircle',
-          version: '1.0.0',
+          version: '1.1.0',
+          language: s.language,
           exportedAt: new Date().toISOString(),
           recipient: s.recipient,
           members: s.members,
@@ -723,7 +1008,7 @@ export const useCareStore = create<CareStoreState>((set, get) => {
         if (!parsed || !Array.isArray(parsed.members) || !Array.isArray(parsed.expenses)) {
           return {
             success: false,
-            message: 'Invalid CareCircle sync file format.',
+            message: 'Invalid CareCircle sync code.',
           };
         }
         set({
@@ -737,24 +1022,25 @@ export const useCareStore = create<CareStoreState>((set, get) => {
         persist();
         return {
           success: true,
-          message: `Synced ${parsed.expenses.length} medical bills & ${parsed.members.length} family members!`,
+          message: `OK (${parsed.expenses.length})`,
         };
       } catch (e) {
         return {
           success: false,
-          message: 'Could not parse JSON sync code. Please check the pasted text.',
+          message: 'Error parsing sync code.',
         };
       }
     },
 
     resetToDemoData: () => {
+      const demo = getDemoDataset(get().language);
       set({
-        recipient: DEFAULT_RECIPIENT,
-        members: DEFAULT_MEMBERS,
-        expenses: DEFAULT_EXPENSES,
+        recipient: demo.recipient,
+        members: demo.members,
+        expenses: demo.expenses,
         settlements: [],
-        shifts: DEFAULT_SHIFTS,
-        medications: DEFAULT_MEDICATIONS,
+        shifts: demo.shifts,
+        medications: demo.medications,
       });
       persist();
     },
@@ -770,4 +1056,3 @@ export const useCareStore = create<CareStoreState>((set, get) => {
     },
   };
 });
-
