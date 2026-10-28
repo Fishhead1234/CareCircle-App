@@ -69,7 +69,7 @@ export const SettingsAndFamilyScreen: React.FC = () => {
   const [newMemberRelation, setNewMemberRelation] = useState('');
 
   // Supabase Family Room Live Sync (Built-in credentials hardcoded)
-  const [roomCodeInput, setRoomCodeInput] = useState(roomCode || 'FAN-FAMILY');
+  const [roomCodeInput, setRoomCodeInput] = useState(roomCode || '');
   const [showSqlModal, setShowSqlModal] = useState(false);
 
   // Sync (.json file export & import)
@@ -572,18 +572,28 @@ export const SettingsAndFamilyScreen: React.FC = () => {
 
         {showSqlModal && (
           <div className="p-3 rounded-xl bg-slate-900 text-slate-100 space-y-2">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-[11px] font-bold text-teal-300">
-                Supabase SQL Editor Setup (Run once in Supabase SQL Editor if needed)
+                1-Time Setup: Click "Copy SQL", then paste & click "Run" in Supabase SQL Editor
               </span>
-              <button
-                type="button"
-                onClick={handleCopySqlScript}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-teal-500 text-slate-950 font-bold text-[11px] cursor-pointer"
-              >
-                <Copy className="w-3 h-3" />
-                <span>Copy SQL</span>
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={handleCopySqlScript}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-[11px] cursor-pointer"
+                >
+                  <Copy className="w-3 h-3" />
+                  <span>1. Copy SQL</span>
+                </button>
+                <a
+                  href="https://supabase.com/dashboard/project/muluvbiizqtitctgcebt/sql/new"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-2.5 py-1 rounded-lg bg-blue-500 hover:bg-blue-400 text-white font-bold text-[11px]"
+                >
+                  2. Open SQL Editor ↗
+                </a>
+              </div>
             </div>
             <pre className="text-[10px] font-mono overflow-x-auto text-slate-300 max-h-36">
               {SUPABASE_SQL_SCHEMA}
@@ -601,25 +611,29 @@ export const SettingsAndFamilyScreen: React.FC = () => {
               onChange={(e) => setRoomCodeInput(e.target.value.toUpperCase())}
               placeholder={
                 language === 'zh-TW'
-                  ? '輸入家庭房間碼（例如：FAN-FAMILY）'
-                  : 'Enter Family Room Code (e.g. FAN-FAMILY)'
+                  ? '請輸入家庭群組名稱以開啟同步...'
+                  : 'Type a name for your family group...'
               }
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-mono font-extrabold uppercase tracking-wider text-slate-900 dark:text-white"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-mono font-extrabold uppercase tracking-wider text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 placeholder:font-normal placeholder:normal-case placeholder:tracking-normal"
             />
           </div>
           <button
             type="submit"
-            disabled={syncStatus === 'syncing'}
-            className="px-4 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-extrabold text-xs cursor-pointer shadow-sm shrink-0 flex items-center gap-1.5"
+            disabled={!roomCodeInput.trim() || syncStatus === 'syncing'}
+            className={`px-4 py-2.5 rounded-xl font-extrabold text-xs shadow-sm shrink-0 flex items-center gap-1.5 transition ${
+              !roomCodeInput.trim() || syncStatus === 'syncing'
+                ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed'
+                : 'bg-teal-600 hover:bg-teal-500 text-white cursor-pointer'
+            }`}
           >
             <Cloud className="w-4 h-4" />
             <span>
               {language === 'zh-TW'
                 ? roomCode
-                  ? '切換 / 重新同步房間碼'
+                  ? '切換 / 重新同步群組'
                   : '連線並開啟自動雲端同步'
                 : roomCode
-                ? 'Update / Sync Room Code'
+                ? 'Update / Sync Group'
                 : 'Connect Family Room'}
             </span>
           </button>

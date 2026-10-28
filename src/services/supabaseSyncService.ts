@@ -151,10 +151,136 @@ async function fetchWithKeyFallback(
   return res;
 }
 
+function stripHeavyImages(payload: CloudLedgerPayload): CloudLedgerPayload {
+  return {
+    ...payload,
+    expenses: Array.isArray(payload.expenses)
+      ? payload.expenses.map((e) => {
+          const { receiptImageDataUrl, ...rest } = e || {};
+          return rest;
+        })
+      : [],
+  };
+}
+
+function getRoomAuthCredentials(cleanCode: string): { email: string; password: string } {
+  const bytes = new TextEncoder().encode(cleanCode);
+  const hex = Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+    .slice(0, 36);
+  return {
+    email: `room.${hex}@carecircle.app`,
+    password: `CcRoom#${cleanCode}#2026!`,
+  };
+}
+
+async function fetchRoomViaSupabaseAuth(
+  url: string,
+  anonKey: string,
+  cleanCode: string
+): Promise<{ found: boolean; record?: CloudRoomRecord; ok: boolean }> {
+  try {
+    const { email, password } = getRoomAuthCredentials(cleanCode);
+    const res = await fetchWithKeyFallback(
+      `${url}/auth/v1/token?grant_type=password`,
+      anonKey,
+      {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+      }
+    );
+
+    if (res.ok) {
+      const data = await res.json();
+      const roomRecord = data?.user?.user_metadata?.carecircle_room as CloudRoomRecord | undefined;
+      if (roomRecord && roomRecord.ledger_json) {
+        return { found: true, record: roomRecord, ok: true };
+      }
+      return { found: false, ok: true };
+    }
+
+    const txt = await res.text();
+    if (res.status === 400 && txt.includes('Invalid login credentials')) {
+      // Room user hasn't been created yet, but Auth endpoint is working
+      return { found: false, ok: true };
+    }
+    return { found: false, ok: false };
+  } catch {
+    return { found: false, ok: false };
+  }
+}
+
+async function upsertRoomViaSupabaseAuth(
+  url: string,
+  anonKey: string,
+  cleanCode: string,
+  record: CloudRoomRecord
+): Promise<{ success: boolean; updatedAt?: string }> {
+  try {
+    const { email, password } = getRoomAuthCredentials(cleanCode);
+    const compactRecord: CloudRoomRecord = {
+      ...record,
+      ledger_json: stripHeavyImages(record.ledger_json),
+    };
+
+    // 1. Try signing in to existing room account
+    const loginRes = await fetchWithKeyFallback(
+      `${url}/auth/v1/token?grant_type=password`,
+      anonKey,
+      {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+      }
+    );
+
+    if (loginRes.ok) {
+      const loginData = await loginRes.json();
+      const token = loginData?.access_token;
+      if (token) {
+        const updateRes = await fetch(`${url}/auth/v1/user`, {
+          method: 'PUT',
+          headers: {
+            apikey: anonKey,
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            data: { carecircle_room: compactRecord },
+          }),
+        });
+        if (updateRes.ok) {
+          return { success: true, updatedAt: record.updated_at };
+        }
+      }
+    }
+
+    // 2. If room account doesn't exist yet, sign it up with the initial room record
+    const signupRes = await fetchWithKeyFallback(`${url}/auth/v1/signup`, anonKey, {
+      method: 'POST',
+      body: JSON.stringify({
+        email,
+        password,
+        data: { carecircle_room: compactRecord },
+      }),
+    });
+
+    if (signupRes.ok) {
+      const signupData = await signupRes.json();
+      if (signupData?.access_token) {
+        return { success: true, updatedAt: record.updated_at };
+      }
+    }
+
+    return { success: false };
+  } catch {
+    return { success: false };
+  }
+}
 export const supabaseSyncService = {
   /**
    * Fetch a family room by room_code from `care_family_rooms`.
-   * If `care_family_rooms` table hasn't been created yet, tries fallback table `inspections` if available.
+   * If `care_family_rooms` table hasn't been created yet, tries fallback table `inspections` or Supabase Auth metadata.
    */
   async fetchRoom(roomCode: string): Promise<{
     found: boolean;
@@ -182,7 +308,7 @@ export const supabaseSyncService = {
       }
 
       const errBody = await res.text();
-      // If care_family_rooms table does not exist yet, try fallback table `inspections`
+      // If care_family_rooms table does not exist yet, try fallback table `inspections` or Supabase Auth metadata
       if (res.status === 404 || errBody.includes('PGRST205') || errBody.includes('care_family_rooms')) {
         const fallbackId = `carecircle_room_${cleanCode}`;
         const fbRes = await fetchWithKeyFallback(
@@ -208,10 +334,17 @@ export const supabaseSyncService = {
           return { found: false };
         }
 
+        // Try zero-SQL Supabase Auth metadata fallback
+        const authRes = await fetchRoomViaSupabaseAuth(url, anonKey, cleanCode);
+        if (authRes.ok) {
+          return { found: authRes.found, record: authRes.record };
+        }
+
         return {
           found: false,
           needsTableSetup: true,
-          error: 'Table public.care_family_rooms not found. Please run the SQL setup script in Supabase SQL Editor.',
+          error:
+            'One-time Supabase table setup needed: click "Copy SQL" below and click Run in your Supabase SQL Editor.',
         };
       }
 
@@ -225,7 +358,7 @@ export const supabaseSyncService = {
   },
 
   /**
-   * Upsert a family room record into `care_family_rooms` (with automatic fallback to `inspections` if needed).
+   * Upsert a family room record into `care_family_rooms` (with automatic fallback to `inspections` or Supabase Auth).
    */
   async upsertRoom(
     roomCode: string,
@@ -270,7 +403,7 @@ export const supabaseSyncService = {
 
       const errBody = await res.text();
       if (res.status === 404 || errBody.includes('PGRST205') || errBody.includes('care_family_rooms')) {
-        // Try fallback to `public.inspections` if user shares the same Supabase project
+        // 1. Try fallback to `public.inspections` if user shares the same Supabase project
         const fallbackId = `carecircle_room_${cleanCode}`;
         const fbRes = await fetchWithKeyFallback(
           `${url}/rest/v1/inspections?on_conflict=id`,
@@ -293,10 +426,17 @@ export const supabaseSyncService = {
           return { success: true, updatedAt: nowIso };
         }
 
+        // 2. Try zero-SQL Supabase Auth metadata fallback
+        const authUpsert = await upsertRoomViaSupabaseAuth(url, anonKey, cleanCode, record);
+        if (authUpsert.success) {
+          return { success: true, updatedAt: nowIso };
+        }
+
         return {
           success: false,
           needsTableSetup: true,
-          error: 'Table public.care_family_rooms not found. Please run the SQL setup script in Supabase SQL Editor.',
+          error:
+            'One-time Supabase table setup needed: click "Copy SQL" below and click Run in your Supabase SQL Editor.',
         };
       }
 
