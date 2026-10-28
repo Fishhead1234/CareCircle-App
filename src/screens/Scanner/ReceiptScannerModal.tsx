@@ -38,7 +38,7 @@ export const ReceiptScannerModal: React.FC<ReceiptScannerModalProps> = ({ isOpen
   const [category, setCategory] = useState<ExpenseCategory>('HOSPITAL_CLINIC');
   const [totalAmount, setTotalAmount] = useState<string>('');
   const [insuranceReimbursedAmount, setInsuranceReimbursedAmount] = useState<string>('0');
-  const [paidByMemberId, setPaidByMemberId] = useState<string>(members[0]?.id || '');
+  const [paidByMemberId, setPaidByMemberId] = useState<string>('SHARED_POOL');
   const [isTaxDeductible, setIsTaxDeductible] = useState(true);
   const [lineItems, setLineItems] = useState<ReceiptLineItem[]>([]);
 
@@ -228,11 +228,27 @@ export const ReceiptScannerModal: React.FC<ReceiptScannerModalProps> = ({ isOpen
             )}
           </div>
 
-          {/* 2. Who Paid? (1-Tap Family Member Selector) */}
+          {/* 2. Who Paid? (Shared Fund Pool or Individual Payer) */}
           <div>
             <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1.5">
               {t('field_who_paid')}
             </label>
+            <button
+              type="button"
+              onClick={() => setPaidByMemberId('SHARED_POOL')}
+              className={`w-full mb-2 p-2.5 rounded-xl border text-left transition cursor-pointer flex items-center justify-between ${
+                paidByMemberId === 'SHARED_POOL'
+                  ? 'border-emerald-600 bg-emerald-500/10 ring-2 ring-emerald-500/20'
+                  : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50'
+              }`}
+            >
+              <span className="text-xs font-extrabold text-slate-900 dark:text-white">
+                {t('shared_pool_payer')}
+              </span>
+              {paidByMemberId === 'SHARED_POOL' && (
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              )}
+            </button>
             <div className="grid grid-cols-3 gap-2">
               {members.map((m) => {
                 const selected = paidByMemberId === m.id;

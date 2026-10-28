@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   LayoutDashboard,
+  Wallet,
   Clock,
   FileText,
   Camera,
@@ -12,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useCareStore, AppTab } from './store/careStore';
 import { FamilyHubScreen } from './screens/Hub/FamilyHubScreen';
+import { FundsPoolScreen } from './screens/Funds/FundsPoolScreen';
 import { CaregiverAndMedsScreen } from './screens/CareLog/CaregiverAndMedsScreen';
 import { SettingsAndFamilyScreen } from './screens/Settings/SettingsAndFamilyScreen';
 import { ReceiptScannerModal } from './screens/Scanner/ReceiptScannerModal';
@@ -49,6 +51,11 @@ export const App: React.FC = () => {
       id: 'hub',
       label: t('tab_hub'),
       icon: <LayoutDashboard className="w-5 h-5" />,
+    },
+    {
+      id: 'funds',
+      label: t('tab_funds'),
+      icon: <Wallet className="w-5 h-5" />,
     },
     {
       id: 'carelog',
@@ -144,6 +151,7 @@ export const App: React.FC = () => {
         {activeTab === 'hub' && (
           <FamilyHubScreen onOpenScanner={() => setIsScannerOpen(true)} />
         )}
+        {activeTab === 'funds' && <FundsPoolScreen />}
         {activeTab === 'carelog' && <CaregiverAndMedsScreen />}
         {activeTab === 'settings' && <SettingsAndFamilyScreen />}
       </main>
@@ -157,9 +165,9 @@ export const App: React.FC = () => {
         <Camera className="w-6 h-6" />
       </button>
 
-      {/* Simple 3-Tab Bottom Navigation Bar */}
+      {/* 4-Tab Bottom Navigation Bar */}
       <nav className="fixed bottom-0 inset-x-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800">
-        <div className="max-w-xl mx-auto px-3 h-16 grid grid-cols-3 gap-1">
+        <div className="max-w-xl mx-auto px-2 h-16 grid grid-cols-4 gap-1">
           {navItems.map((item) => {
             const active = activeTab === item.id;
             return (

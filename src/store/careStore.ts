@@ -3,6 +3,7 @@ import {
   CareRecipientProfile,
   FamilyMember,
   MedicalExpense,
+  FundContribution,
   PoolSettlement,
   CaregiverShift,
   MedicationSchedule,
@@ -11,9 +12,17 @@ import {
 } from '../types/care';
 import { AppLanguage, TRANSLATIONS, SUPPORTED_CURRENCIES } from '../i18n/translations';
 
-export type AppTab = 'hub' | 'carelog' | 'settings';
+export type AppTab = 'hub' | 'funds' | 'carelog' | 'settings';
 
 export const ADMIN_PASSCODES = ['admin888', 'invest2026'];
+
+interface PoolTotalsSummary {
+  totalFundsPutIn: number;
+  grossBilled: number;
+  insuranceRefund: number;
+  netOutOfPocket: number;
+  fundsAvailable: number;
+}
 
 interface CareStoreState {
   activeTab: AppTab;
@@ -28,6 +37,7 @@ interface CareStoreState {
 
   recipient: CareRecipientProfile;
   members: FamilyMember[];
+  fundContributions: FundContribution[];
   expenses: MedicalExpense[];
   settlements: PoolSettlement[];
   shifts: CaregiverShift[];
@@ -49,6 +59,10 @@ interface CareStoreState {
   removeFamilyMember: (id: string) => void;
   equalizeSplits: () => void;
 
+  // Fund Pool Contributions
+  addFundContribution: (item: Omit<FundContribution, 'id'>) => void;
+  deleteFundContribution: (id: string) => void;
+
   // Expenses & Settlements
   addExpense: (expense: Omit<MedicalExpense, 'id'>) => string;
   updateExpense: (id: string, updates: Partial<MedicalExpense>) => void;
@@ -64,7 +78,8 @@ interface CareStoreState {
   refillMedication: (medId: string, addedPills: number) => void;
   deleteMedication: (id: string) => void;
 
-  // Computed Pool Math
+  // Computed Pool & Payer Math
+  getPoolTotals: () => PoolTotalsSummary;
   getMemberBalances: () => MemberBalanceSummary[];
   getSuggestedSettlements: () => SuggestedSettlement[];
 
@@ -75,7 +90,7 @@ interface CareStoreState {
   clearAllData: () => void;
 }
 
-const STORAGE_KEY = 'carecircle_family_hub_v2';
+const STORAGE_KEY = 'carecircle_family_hub_v3';
 
 const DEMO_DATA_ZH_TW = {
   recipient: {
@@ -119,6 +134,29 @@ const DEMO_DATA_ZH_TW = {
       email: 'emily.park@example.com',
     },
   ] as FamilyMember[],
+  fundContributions: [
+    {
+      id: 'fc_1',
+      memberId: 'mem_sarah',
+      amount: 1200,
+      date: '2026-10-15',
+      note: '10月份家庭照護共同基金存入（大姐）',
+    },
+    {
+      id: 'fc_2',
+      memberId: 'mem_david',
+      amount: 600,
+      date: '2026-10-16',
+      note: '10月份家庭照護共同基金首期存入（大哥）',
+    },
+    {
+      id: 'fc_3',
+      memberId: 'mem_emily',
+      amount: 450,
+      date: '2026-10-16',
+      note: '10月份家庭照護共同基金存入（小妹）',
+    },
+  ] as FundContribution[],
   expenses: [
     {
       id: 'exp_1',
@@ -127,7 +165,7 @@ const DEMO_DATA_ZH_TW = {
       category: 'HOSPITAL_CLINIC',
       totalAmount: 1480,
       insuranceReimbursedAmount: 620,
-      paidByMemberId: 'mem_sarah',
+      paidByMemberId: 'SHARED_POOL',
       insuranceClaimStatus: 'REIMBURSED',
       isTaxDeductible: true,
       aiConfidence: 99,
@@ -169,7 +207,7 @@ const DEMO_DATA_ZH_TW = {
       category: 'PHARMACY_MEDS',
       totalAmount: 246.5,
       insuranceReimbursedAmount: 0,
-      paidByMemberId: 'mem_david',
+      paidByMemberId: 'SHARED_POOL',
       insuranceClaimStatus: 'SUBMITTED',
       isTaxDeductible: true,
       aiConfidence: 98,
@@ -211,7 +249,7 @@ const DEMO_DATA_ZH_TW = {
       category: 'IN_HOME_CAREGIVER',
       totalAmount: 560,
       insuranceReimbursedAmount: 0,
-      paidByMemberId: 'mem_sarah',
+      paidByMemberId: 'SHARED_POOL',
       insuranceClaimStatus: 'NOT_SUBMITTED',
       isTaxDeductible: true,
       aiConfidence: 97,
@@ -235,7 +273,7 @@ const DEMO_DATA_ZH_TW = {
       category: 'MEDICAL_SUPPLIES',
       totalAmount: 315,
       insuranceReimbursedAmount: 0,
-      paidByMemberId: 'mem_emily',
+      paidByMemberId: 'SHARED_POOL',
       insuranceClaimStatus: 'SUBMITTED',
       isTaxDeductible: true,
       aiConfidence: 96,
@@ -273,7 +311,7 @@ const DEMO_DATA_ZH_TW = {
       hours: 8,
       hourlyRate: 35,
       totalPay: 280,
-      paidByMemberId: 'mem_sarah',
+      paidByMemberId: 'SHARED_POOL',
       tasksCompleted: ['量測血壓與血糖', '協助沐浴更衣', '髖關節復健運動', '準備低鹽午餐'],
       vitalsOrNotes: '血壓 126/78 mmHg，空腹血糖 108 mg/dL。使用助行器步行穩定，精神良好。',
       linkedExpenseId: 'exp_3',
@@ -288,7 +326,7 @@ const DEMO_DATA_ZH_TW = {
       hours: 6,
       hourlyRate: 35,
       totalPay: 210,
-      paidByMemberId: 'mem_david',
+      paidByMemberId: 'SHARED_POOL',
       tasksCompleted: ['提醒按時服藥', '陪同至診所物理治療', '領取慢性病處方藥'],
       vitalsOrNotes: '血壓 124/76 mmHg。完成 45 分鐘復健步態訓練。',
     },
@@ -378,6 +416,29 @@ const DEMO_DATA_EN = {
       email: 'emily.park@example.com',
     },
   ] as FamilyMember[],
+  fundContributions: [
+    {
+      id: 'fc_1',
+      memberId: 'mem_sarah',
+      amount: 1200,
+      date: '2026-10-15',
+      note: 'October Care Pool Deposit (Sarah)',
+    },
+    {
+      id: 'fc_2',
+      memberId: 'mem_david',
+      amount: 600,
+      date: '2026-10-16',
+      note: 'October Initial Care Pool Deposit (David)',
+    },
+    {
+      id: 'fc_3',
+      memberId: 'mem_emily',
+      amount: 450,
+      date: '2026-10-16',
+      note: 'October Care Pool Deposit (Emily)',
+    },
+  ] as FundContribution[],
   expenses: [
     {
       id: 'exp_1',
@@ -386,7 +447,7 @@ const DEMO_DATA_EN = {
       category: 'HOSPITAL_CLINIC',
       totalAmount: 1480.0,
       insuranceReimbursedAmount: 620.0,
-      paidByMemberId: 'mem_sarah',
+      paidByMemberId: 'SHARED_POOL',
       insuranceClaimStatus: 'REIMBURSED',
       isTaxDeductible: true,
       aiConfidence: 99,
@@ -428,7 +489,7 @@ const DEMO_DATA_EN = {
       category: 'PHARMACY_MEDS',
       totalAmount: 246.5,
       insuranceReimbursedAmount: 0,
-      paidByMemberId: 'mem_david',
+      paidByMemberId: 'SHARED_POOL',
       insuranceClaimStatus: 'SUBMITTED',
       isTaxDeductible: true,
       aiConfidence: 98,
@@ -470,7 +531,7 @@ const DEMO_DATA_EN = {
       category: 'IN_HOME_CAREGIVER',
       totalAmount: 560.0,
       insuranceReimbursedAmount: 0,
-      paidByMemberId: 'mem_sarah',
+      paidByMemberId: 'SHARED_POOL',
       insuranceClaimStatus: 'NOT_SUBMITTED',
       isTaxDeductible: true,
       aiConfidence: 97,
@@ -494,7 +555,7 @@ const DEMO_DATA_EN = {
       category: 'MEDICAL_SUPPLIES',
       totalAmount: 315.0,
       insuranceReimbursedAmount: 0,
-      paidByMemberId: 'mem_emily',
+      paidByMemberId: 'SHARED_POOL',
       insuranceClaimStatus: 'SUBMITTED',
       isTaxDeductible: true,
       aiConfidence: 96,
@@ -532,7 +593,7 @@ const DEMO_DATA_EN = {
       hours: 8,
       hourlyRate: 35,
       totalPay: 280,
-      paidByMemberId: 'mem_sarah',
+      paidByMemberId: 'SHARED_POOL',
       tasksCompleted: ['Morning Vitals', 'Shower Assist', 'Walking Exercise', 'Lunch Prep'],
       vitalsOrNotes: 'BP 126/78 mmHg, Glucose 108 mg/dL. Walked well with walker.',
       linkedExpenseId: 'exp_3',
@@ -547,7 +608,7 @@ const DEMO_DATA_EN = {
       hours: 6,
       hourlyRate: 35,
       totalPay: 210,
-      paidByMemberId: 'mem_david',
+      paidByMemberId: 'SHARED_POOL',
       tasksCompleted: ['Meds Reminder', 'Outpatient PT Visit', 'Pharmacy Pickup'],
       vitalsOrNotes: 'BP 124/76 mmHg. Good energy after PT session.',
     },
@@ -633,6 +694,7 @@ export const useCareStore = create<CareStoreState>((set, get) => {
           trialStartDate: s.trialStartDate,
           recipient: s.recipient,
           members: s.members,
+          fundContributions: s.fundContributions,
           expenses: s.expenses,
           settlements: s.settlements,
           shifts: s.shifts,
@@ -657,6 +719,7 @@ export const useCareStore = create<CareStoreState>((set, get) => {
 
     recipient: saved?.recipient || initialDemo.recipient,
     members: saved?.members || initialDemo.members,
+    fundContributions: saved?.fundContributions || initialDemo.fundContributions,
     expenses: saved?.expenses || initialDemo.expenses,
     settlements: saved?.settlements || [],
     shifts: saved?.shifts || initialDemo.shifts,
@@ -674,7 +737,6 @@ export const useCareStore = create<CareStoreState>((set, get) => {
 
     setLanguage: (lang) => {
       const current = get();
-      // If using default demo recipient, also switch sample data language so the user sees localized bills
       const isStillDemoRecipient =
         current.recipient.name === DEMO_DATA_ZH_TW.recipient.name ||
         current.recipient.name === DEMO_DATA_EN.recipient.name ||
@@ -686,6 +748,7 @@ export const useCareStore = create<CareStoreState>((set, get) => {
           language: lang,
           recipient: nextDemo.recipient,
           members: nextDemo.members,
+          fundContributions: nextDemo.fundContributions,
           expenses: nextDemo.expenses,
           shifts: nextDemo.shifts,
           medications: nextDemo.medications,
@@ -769,6 +832,24 @@ export const useCareStore = create<CareStoreState>((set, get) => {
           })),
         };
       });
+      persist();
+    },
+
+    addFundContribution: (item) => {
+      const newContrib: FundContribution = {
+        ...item,
+        id: `fc_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      };
+      set((state) => ({
+        fundContributions: [newContrib, ...state.fundContributions],
+      }));
+      persist();
+    },
+
+    deleteFundContribution: (id) => {
+      set((state) => ({
+        fundContributions: state.fundContributions.filter((fc) => fc.id !== id),
+      }));
       persist();
     },
 
@@ -908,26 +989,53 @@ export const useCareStore = create<CareStoreState>((set, get) => {
       persist();
     },
 
+    getPoolTotals: () => {
+      const { fundContributions, expenses, members } = get();
+      const memberIds = new Set(members.map((m) => m.id));
+
+      const totalDepositedIntoFund = fundContributions.reduce((s, fc) => s + fc.amount, 0);
+      const directPocketBills = expenses
+        .filter((e) => memberIds.has(e.paidByMemberId))
+        .reduce((s, e) => s + Math.max(0, e.totalAmount - (e.insuranceReimbursedAmount || 0)), 0);
+
+      const totalFundsPutIn = totalDepositedIntoFund + directPocketBills;
+      const grossBilled = expenses.reduce((s, e) => s + e.totalAmount, 0);
+      const insuranceRefund = expenses.reduce((s, e) => s + (e.insuranceReimbursedAmount || 0), 0);
+      const netOutOfPocket = Math.max(0, grossBilled - insuranceRefund);
+      const fundsAvailable = totalFundsPutIn - netOutOfPocket;
+
+      return {
+        totalFundsPutIn,
+        grossBilled,
+        insuranceRefund,
+        netOutOfPocket,
+        fundsAvailable,
+      };
+    },
+
     getMemberBalances: () => {
-      const { members, expenses, settlements } = get();
-      const totalSplitWeight = members.reduce((acc, m) => acc + (m.splitPercentage || 0), 0) || 100;
+      const { members, fundContributions, expenses, settlements } = get();
+      const totalSplitWeight =
+        members.reduce((acc, m) => acc + (m.splitPercentage || 0), 0) || 100;
 
       const totalNetPoolExpense = expenses.reduce(
         (sum, exp) => sum + Math.max(0, exp.totalAmount - (exp.insuranceReimbursedAmount || 0)),
         0
       );
 
-      return members.map((member) => {
+      // Compute each member's total put in (fund deposits + direct pocket bills)
+      const rawContribs = members.map((member) => {
+        const fundDeposited = fundContributions
+          .filter((fc) => fc.memberId === member.id)
+          .reduce((s, fc) => s + fc.amount, 0);
+
         const memberExpenses = expenses.filter((e) => e.paidByMemberId === member.id);
         const grossPaid = memberExpenses.reduce((s, e) => s + e.totalAmount, 0);
         const insuranceReimbursed = memberExpenses.reduce(
           (s, e) => s + (e.insuranceReimbursedAmount || 0),
           0
         );
-        const netOutOfPocketPaid = Math.max(0, grossPaid - insuranceReimbursed);
-
-        const shareRatio = (member.splitPercentage || 0) / totalSplitWeight;
-        const assignedShare = totalNetPoolExpense * shareRatio;
+        const directBillsPaid = Math.max(0, grossPaid - insuranceReimbursed);
 
         const settlementsPaidOut = settlements
           .filter((s) => s.fromMemberId === member.id)
@@ -937,17 +1045,47 @@ export const useCareStore = create<CareStoreState>((set, get) => {
           .filter((s) => s.toMemberId === member.id)
           .reduce((acc, s) => acc + s.amount, 0);
 
-        const netBalance =
-          netOutOfPocketPaid + settlementsPaidOut - settlementsReceived - assignedShare;
+        const totalContributed =
+          fundDeposited + directBillsPaid + settlementsPaidOut - settlementsReceived;
 
         return {
           member,
+          fundDeposited,
+          directBillsPaid,
           grossPaid,
           insuranceReimbursed,
-          netOutOfPocketPaid,
-          assignedShare,
           settlementsPaidOut,
           settlementsReceived,
+          totalContributed,
+        };
+      });
+
+      const grandTotalContributed =
+        rawContribs.reduce((s, r) => s + Math.max(0, r.totalContributed), 0) || 0;
+
+      return rawContribs.map((r) => {
+        const shareRatio = (r.member.splitPercentage || 0) / totalSplitWeight;
+        const assignedShare = totalNetPoolExpense * shareRatio;
+        const actualContributionPercent =
+          grandTotalContributed > 0
+            ? (Math.max(0, r.totalContributed) / grandTotalContributed) * 100
+            : 0;
+
+        // Positive = Excess credit in pool; Negative = Shortfall (amount member needs to put in)
+        const netBalance = r.totalContributed - assignedShare;
+
+        return {
+          member: r.member,
+          fundDeposited: r.fundDeposited,
+          directBillsPaid: r.directBillsPaid,
+          totalContributed: r.totalContributed,
+          actualContributionPercent,
+          grossPaid: r.grossPaid,
+          insuranceReimbursed: r.insuranceReimbursed,
+          netOutOfPocketPaid: r.totalContributed,
+          assignedShare,
+          settlementsPaidOut: r.settlementsPaidOut,
+          settlementsReceived: r.settlementsReceived,
           netBalance,
         };
       });
@@ -999,11 +1137,13 @@ export const useCareStore = create<CareStoreState>((set, get) => {
       return JSON.stringify(
         {
           app: 'CareCircle',
-          version: '1.1.0',
+          version: '1.2.0',
           language: s.language,
+          currencyCode: s.currencyCode,
           exportedAt: new Date().toISOString(),
           recipient: s.recipient,
           members: s.members,
+          fundContributions: s.fundContributions,
           expenses: s.expenses,
           settlements: s.settlements,
           shifts: s.shifts,
@@ -1026,6 +1166,9 @@ export const useCareStore = create<CareStoreState>((set, get) => {
         set({
           recipient: parsed.recipient || get().recipient,
           members: parsed.members,
+          fundContributions: Array.isArray(parsed.fundContributions)
+            ? parsed.fundContributions
+            : [],
           expenses: parsed.expenses,
           settlements: Array.isArray(parsed.settlements) ? parsed.settlements : [],
           shifts: Array.isArray(parsed.shifts) ? parsed.shifts : [],
@@ -1049,6 +1192,7 @@ export const useCareStore = create<CareStoreState>((set, get) => {
       set({
         recipient: demo.recipient,
         members: demo.members,
+        fundContributions: demo.fundContributions,
         expenses: demo.expenses,
         settlements: [],
         shifts: demo.shifts,
@@ -1059,6 +1203,7 @@ export const useCareStore = create<CareStoreState>((set, get) => {
 
     clearAllData: () => {
       set({
+        fundContributions: [],
         expenses: [],
         settlements: [],
         shifts: [],

@@ -3,11 +3,12 @@ import {
   Camera,
   HeartPulse,
   CheckCircle2,
-  ArrowRight,
   Receipt,
   Trash2,
   Pencil,
   Plus,
+  Wallet,
+  ArrowUpRight,
 } from 'lucide-react';
 import { useCareStore } from '../../store/careStore';
 import { ExpenseCategory, EXPENSE_CATEGORY_META } from '../../types/care';
@@ -24,16 +25,17 @@ export const FamilyHubScreen: React.FC<FamilyHubScreenProps> = ({ onOpenScanner 
     members,
     expenses,
     currencySymbol,
+    setActiveTab,
     updateRecipient,
     updateFamilyMember,
     addFamilyMember,
     removeFamilyMember,
     equalizeSplits,
+    addFundContribution,
     updateExpense,
     deleteExpense,
-    recordSettlement,
+    getPoolTotals,
     getMemberBalances,
-    getSuggestedSettlements,
     t,
   } = useCareStore();
 
@@ -44,36 +46,23 @@ export const FamilyHubScreen: React.FC<FamilyHubScreenProps> = ({ onOpenScanner 
   const [newMemberName, setNewMemberName] = useState('');
   const [newMemberRole, setNewMemberRole] = useState('');
 
+  const pool = getPoolTotals();
   const balances = getMemberBalances();
-  const suggestions = getSuggestedSettlements();
-
-  const grossTotal = expenses.reduce((s, e) => s + e.totalAmount, 0);
-  const reimbursedTotal = expenses.reduce((s, e) => s + (e.insuranceReimbursedAmount || 0), 0);
-  const netSharedPool = Math.max(0, grossTotal - reimbursedTotal);
 
   const filteredExpenses = expenses.filter((exp) => {
     if (categoryFilter !== 'ALL' && exp.category !== categoryFilter) return false;
     return true;
   });
 
-  const handleSettleUp = (
-    fromId: string,
-    toId: string,
-    amount: number,
-    fromName: string,
-    toName: string
-  ) => {
-    recordSettlement({
-      fromMemberId: fromId,
-      toMemberId: toId,
-      amount,
+  const handleQuickTopUp = (memberId: string, memberName: string, shortfall: number) => {
+    const rounded = Math.ceil(shortfall * 100) / 100;
+    addFundContribution({
+      memberId,
+      amount: rounded,
       date: new Date().toISOString().split('T')[0],
-      method: 'Transfer',
-      note: `${fromName} -> ${toName}`,
+      note: `${memberName} — Shortfall Top-Up`,
     });
-    setSettledToast(
-      `${t('settled_toast')} (${fromName} → ${toName} ${currencySymbol}${amount.toFixed(0)})`
-    );
+    setSettledToast(`${t('settled_toast')} (+${currencySymbol}${rounded.toFixed(2)} ${memberName})`);
     setTimeout(() => setSettledToast(null), 3200);
   };
 
@@ -92,9 +81,9 @@ export const FamilyHubScreen: React.FC<FamilyHubScreenProps> = ({ onOpenScanner 
 
   return (
     <div className="space-y-4 pb-8">
-      {/* 1. Simple Hero Summary & Big Snap Button */}
-      <div className="rounded-3xl bg-gradient-to-br from-teal-700 via-teal-800 to-slate-900 text-white p-5 shadow-lg">
-        <div className="flex items-center justify-between gap-2 mb-3">
+      {/* 1. Main Dashboard Hero: Funds Available + Out-of-Pocket Expense + Total Billed + Insurance Refund */}
+      <div className="rounded-3xl bg-gradient-to-br from-teal-700 via-teal-800 to-slate-900 text-white p-5 shadow-lg space-y-3.5">
+        <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-10 h-10 rounded-2xl bg-white/15 flex items-center justify-center shrink-0">
               <HeartPulse className="w-5 h-5 text-teal-200" />
@@ -138,36 +127,66 @@ export const FamilyHubScreen: React.FC<FamilyHubScreenProps> = ({ onOpenScanner 
           </button>
         </div>
 
-        {/* Big Clear Total Out-of-Pocket Expense Explanation */}
-        <div className="rounded-2xl bg-white/10 p-3.5 border border-white/10">
-          <div className="flex items-center justify-between gap-2">
-            <div>
-              <div className="text-xs text-teal-100 font-bold">{t('total_shared_cost')}</div>
-              <div className="text-2xl font-black font-mono tracking-tight mt-0.5">
-                {currencySymbol}
-                {netSharedPool.toFixed(2)}
-              </div>
+        {/* Highlighted FUNDS AVAILABLE Box */}
+        <div className="rounded-2xl bg-emerald-500/15 border border-emerald-400/30 p-3.5 flex items-center justify-between gap-2">
+          <div>
+            <div className="flex items-center gap-1.5 text-xs font-extrabold text-emerald-200">
+              <Wallet className="w-4 h-4 text-emerald-300" />
+              <span>{t('funds_available_label')}</span>
             </div>
-            <div className="text-right text-xs text-teal-100 space-y-0.5 font-mono">
-              <div>
-                {t('gross_billed')}: {currencySymbol}
-                {grossTotal.toFixed(0)}
-              </div>
-              {reimbursedTotal > 0 && (
-                <div className="text-emerald-300">
-                  {t('insurance_refund')}: -{currencySymbol}
-                  {reimbursedTotal.toFixed(0)}
-                </div>
-              )}
+            <div
+              className={`text-2xl sm:text-3xl font-black font-mono tracking-tight mt-0.5 ${
+                pool.fundsAvailable >= 0 ? 'text-emerald-300' : 'text-rose-300'
+              }`}
+            >
+              {pool.fundsAvailable >= 0 ? '+' : '-'}
+              {currencySymbol}
+              {Math.abs(pool.fundsAvailable).toFixed(2)}
+            </div>
+            <div className="text-[11px] text-teal-100/80 mt-0.5">
+              {t('total_funds_in_label')}:{' '}
+              <strong className="font-mono text-white">
+                {currencySymbol}
+                {pool.totalFundsPutIn.toFixed(2)}
+              </strong>
             </div>
           </div>
-          <div className="text-[11px] text-teal-200/90 mt-2 pt-2 border-t border-white/10">
-            {t('total_shared_cost_hint')}
+
+          <button
+            onClick={() => setActiveTab('funds')}
+            className="px-3 py-2 rounded-xl bg-white/15 hover:bg-white/25 text-white font-bold text-xs cursor-pointer shrink-0"
+          >
+            {t('manage_funds_btn')}
+          </button>
+        </div>
+
+        {/* Out-of-Pocket Expense, Total Billed, Insurance Refund */}
+        <div className="grid grid-cols-3 gap-2">
+          <div className="rounded-2xl bg-white/10 p-3 border border-white/10">
+            <div className="text-[10px] text-teal-200 font-bold">{t('total_shared_cost')}</div>
+            <div className="text-base sm:text-lg font-black font-mono mt-0.5">
+              {currencySymbol}
+              {pool.netOutOfPocket.toFixed(2)}
+            </div>
+          </div>
+          <div className="rounded-2xl bg-white/10 p-3 border border-white/10">
+            <div className="text-[10px] text-teal-200 font-bold">{t('gross_billed')}</div>
+            <div className="text-base sm:text-lg font-black font-mono mt-0.5">
+              {currencySymbol}
+              {pool.grossBilled.toFixed(2)}
+            </div>
+          </div>
+          <div className="rounded-2xl bg-white/10 p-3 border border-white/10">
+            <div className="text-[10px] text-teal-200 font-bold">{t('insurance_refund')}</div>
+            <div className="text-base sm:text-lg font-black font-mono text-emerald-300 mt-0.5">
+              -{currencySymbol}
+              {pool.insuranceRefund.toFixed(2)}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Toast alert when settling */}
+      {/* Toast alert */}
       {settledToast && (
         <div className="rounded-2xl bg-emerald-600 text-white px-4 py-3 text-xs font-bold flex items-center gap-2 shadow-md">
           <CheckCircle2 className="w-4 h-4 shrink-0" />
@@ -175,15 +194,20 @@ export const FamilyHubScreen: React.FC<FamilyHubScreenProps> = ({ onOpenScanner 
         </div>
       )}
 
-      {/* 2. Who Paid What & Inline Name/Split Editor */}
+      {/* 2. Actual Amount Each Payer Needs to Pay or Has Excess Of */}
       <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4 shadow-sm">
-        <div className="flex items-center justify-between gap-2 mb-3">
-          <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">
-            {t('who_paid_what')}
-          </h3>
+        <div className="flex items-start justify-between gap-2 mb-3">
+          <div>
+            <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">
+              {t('who_paid_what')}
+            </h3>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+              {t('who_paid_what_sub')}
+            </p>
+          </div>
           <button
             onClick={() => setIsEditingMembers(!isEditingMembers)}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer shrink-0 ${
               isEditingMembers
                 ? 'bg-emerald-600 text-white'
                 : 'bg-teal-500/10 text-teal-700 dark:text-teal-300 hover:bg-teal-500/20'
@@ -287,109 +311,98 @@ export const FamilyHubScreen: React.FC<FamilyHubScreenProps> = ({ onOpenScanner 
         ) : (
           <div className="space-y-2.5">
             {balances.map((b) => {
-              const isOwed = b.netBalance > 0.5;
-              const owesPool = b.netBalance < -0.5;
+              const hasExcess = b.netBalance > 0.5;
+              const needsToPay = b.netBalance < -0.5;
+
               return (
                 <div
                   key={b.member.id}
-                  className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between gap-2"
+                  className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 space-y-2"
                 >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div
-                      className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-black text-xs shrink-0"
-                      style={{ backgroundColor: b.member.avatarColor }}
-                    >
-                      {b.member.name.slice(0, 2)}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-bold text-xs text-slate-900 dark:text-white truncate">
-                          {b.member.name}
-                        </span>
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-200/80 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
-                          {b.member.splitPercentage}%
-                        </span>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div
+                        className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-black text-xs shrink-0"
+                        style={{ backgroundColor: b.member.avatarColor }}
+                      >
+                        {b.member.name.slice(0, 2)}
                       </div>
-                      <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">
-                        {t('paid_prefix')} {currencySymbol}
-                        {b.netOutOfPocketPaid.toFixed(0)} • {t('fair_share_prefix')}{' '}
-                        {currencySymbol}
-                        {b.assignedShare.toFixed(0)}
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-bold text-xs text-slate-900 dark:text-white truncate">
+                            {b.member.name}
+                          </span>
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-200/80 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                            {t('agreed_pct_label')}: {b.member.splitPercentage}%
+                          </span>
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-teal-500/15 text-teal-700 dark:text-teal-300">
+                            {t('actual_pct_label')}: {b.actualContributionPercent.toFixed(1)}%
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">
+                          {t('contributed_prefix')} {currencySymbol}
+                          {b.totalContributed.toFixed(2)} • {t('fair_share_prefix')}{' '}
+                          {currencySymbol}
+                          {b.assignedShare.toFixed(2)}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      <div
+                        className={`text-sm font-black font-mono ${
+                          hasExcess
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : needsToPay
+                            ? 'text-rose-600 dark:text-rose-400'
+                            : 'text-slate-400'
+                        }`}
+                      >
+                        {hasExcess
+                          ? `+${currencySymbol}${b.netBalance.toFixed(2)}`
+                          : needsToPay
+                          ? `-${currencySymbol}${Math.abs(b.netBalance).toFixed(2)}`
+                          : `${currencySymbol}0.00`}
+                      </div>
+                      <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400">
+                        {hasExcess
+                          ? t('status_owed')
+                          : needsToPay
+                          ? t('status_owes')
+                          : t('status_settled')}
                       </div>
                     </div>
                   </div>
 
-                  <div className="text-right shrink-0">
-                    <div
-                      className={`text-xs font-extrabold font-mono ${
-                        isOwed
-                          ? 'text-emerald-600 dark:text-emerald-400'
-                          : owesPool
-                          ? 'text-rose-600 dark:text-rose-400'
-                          : 'text-slate-400'
-                      }`}
-                    >
-                      {isOwed
-                        ? `+${currencySymbol}${b.netBalance.toFixed(0)}`
-                        : owesPool
-                        ? `-${currencySymbol}${Math.abs(b.netBalance).toFixed(0)}`
-                        : `${currencySymbol}0`}
+                  {needsToPay && (
+                    <div className="flex justify-end pt-1 border-t border-slate-200/60 dark:border-slate-700/60">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleQuickTopUp(
+                            b.member.id,
+                            b.member.name,
+                            Math.abs(b.netBalance)
+                          )
+                        }
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-[11px] cursor-pointer"
+                      >
+                        <ArrowUpRight className="w-3.5 h-3.5" />
+                        <span>
+                          {t('top_up_shortfall_btn')} ({currencySymbol}
+                          {Math.abs(b.netBalance).toFixed(2)})
+                        </span>
+                      </button>
                     </div>
-                    <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400">
-                      {isOwed
-                        ? t('status_owed')
-                        : owesPool
-                        ? t('status_owes')
-                        : t('status_settled')}
-                    </div>
-                  </div>
+                  )}
                 </div>
               );
             })}
           </div>
         )}
-
-        {/* Suggested 1-Tap Transfers */}
-        {suggestions.length > 0 && (
-          <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
-            <div className="text-[11px] font-extrabold text-teal-700 dark:text-teal-400">
-              {t('settle_up_title')}
-            </div>
-            {suggestions.map((sug, idx) => (
-              <div
-                key={idx}
-                className="flex items-center justify-between gap-2 bg-teal-50/70 dark:bg-teal-950/30 border border-teal-500/20 rounded-xl px-3 py-2"
-              >
-                <div className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5 flex-wrap">
-                  <span>{sug.fromName}</span>
-                  <ArrowRight className="w-3.5 h-3.5 text-teal-500" />
-                  <span>{sug.toName}</span>
-                  <span className="font-mono font-black text-teal-700 dark:text-teal-300 ml-1">
-                    {currencySymbol}
-                    {sug.amount.toFixed(0)}
-                  </span>
-                </div>
-                <button
-                  onClick={() =>
-                    handleSettleUp(
-                      sug.fromMemberId,
-                      sug.toMemberId,
-                      sug.amount,
-                      sug.fromName,
-                      sug.toName
-                    )
-                  }
-                  className="px-2.5 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-500 text-white font-bold text-[11px] shrink-0 cursor-pointer"
-                >
-                  {t('mark_paid_btn')}
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
 
-      {/* 3. Simple Medical Bills List (With 1-Tap Payer Reassignment) */}
+      {/* 3. Simple Medical Bills List (With Shared Fund Pool or Payer Selector) */}
       <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4 shadow-sm">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-1.5">
@@ -461,17 +474,18 @@ export const FamilyHubScreen: React.FC<FamilyHubScreenProps> = ({ onOpenScanner 
                         {exp.providerName}
                       </h4>
 
-                      {/* Interactive "Paid By" Selector on every bill */}
+                      {/* Interactive "Paid By / From" Selector */}
                       <div className="flex items-center gap-1.5 mt-1.5 text-xs text-slate-600 dark:text-slate-300">
                         <span>{t('paid_by')}</span>
                         <select
-                          aria-label="Paid by member"
+                          aria-label="Paid by source"
                           value={exp.paidByMemberId}
                           onChange={(e) =>
                             updateExpense(exp.id, { paidByMemberId: e.target.value })
                           }
                           className="px-2 py-0.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-bold text-xs text-teal-700 dark:text-teal-300 cursor-pointer"
                         >
+                          <option value="SHARED_POOL">{t('shared_pool_payer')}</option>
                           {members.map((m) => (
                             <option key={m.id} value={m.id}>
                               {m.name}

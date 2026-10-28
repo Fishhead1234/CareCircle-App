@@ -41,7 +41,10 @@ export const pdfReportService = {
 
     const rowsHtml = expenses
       .map((exp) => {
-        const payer = memberMap.get(exp.paidByMemberId) || '-';
+        const payer =
+          exp.paidByMemberId === 'SHARED_POOL'
+            ? tr('shared_pool_payer', 'Family Fund Pool')
+            : memberMap.get(exp.paidByMemberId) || '-';
         const net = Math.max(0, exp.totalAmount - (exp.insuranceReimbursedAmount || 0));
         const catLabel = tr(`cat_${exp.category}`, exp.category);
         const lineItemsHtml = exp.lineItems
