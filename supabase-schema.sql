@@ -37,3 +37,4 @@ create policy "Allow anon update care_family_rooms"
   to anon, authenticated
   using (true)
   with check (true);
+

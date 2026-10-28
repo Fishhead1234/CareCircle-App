@@ -22,8 +22,15 @@ export interface CloudRoomRecord {
   updated_at: string;
 }
 
-const ENV_SUPABASE_URL: string = (import.meta as any).env?.VITE_SUPABASE_URL || '';
-const ENV_SUPABASE_ANON_KEY: string = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '';
+const BUILTIN_SUPABASE_URL = 'https://muluvbiizqtitctgcebt.supabase.co';
+const BUILTIN_SUPABASE_ANON_KEY =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im11bHV2YmlpenF0aXRjdGdjZWJ0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMxODEwMDgsImV4cCI6MjEwODc1NzAwOH0.T9hAYAYtRgGIOq9d1H8F0OwVKoeYd-tWNL8vC2X8Ufo';
+const BUILTIN_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_pzmszFbzWinm5_pJ4SJKWg_joAgjGI3';
+
+const ENV_SUPABASE_URL: string =
+  (import.meta as any).env?.VITE_SUPABASE_URL || BUILTIN_SUPABASE_URL;
+const ENV_SUPABASE_ANON_KEY: string =
+  (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || BUILTIN_SUPABASE_ANON_KEY;
 
 const STORAGE_KEY_SB_URL = 'carecircle_supabase_url';
 const STORAGE_KEY_SB_KEY = 'carecircle_supabase_anon_key';
@@ -31,6 +38,13 @@ const STORAGE_KEY_SB_KEY = 'carecircle_supabase_anon_key';
 // Fallback keys if user previously configured Supabase in the same browser
 const LEGACY_SB_URL = 'inspecta_custom_supabase_url';
 const LEGACY_SB_KEY = 'inspecta_custom_supabase_anon_key';
+
+function cleanSupabaseBaseUrl(rawUrl: string): string {
+  return rawUrl
+    .trim()
+    .replace(/\/+$/, '')
+    .replace(/\/rest\/v1$/i, '');
+}
 
 export const SUPABASE_SQL_SCHEMA = `-- Run this once in your Supabase SQL Editor (https://supabase.com/dashboard)
 create table if not exists public.care_family_rooms (
@@ -63,7 +77,10 @@ export function normalizeRoomCode(raw: string): string {
 
 export function getSupabaseConfig(): { url: string; anonKey: string } {
   if (typeof window === 'undefined') {
-    return { url: ENV_SUPABASE_URL.trim(), anonKey: ENV_SUPABASE_ANON_KEY.trim() };
+    return {
+      url: cleanSupabaseBaseUrl(ENV_SUPABASE_URL),
+      anonKey: ENV_SUPABASE_ANON_KEY.trim(),
+    };
   }
 
   const savedUrl =
@@ -75,7 +92,7 @@ export function getSupabaseConfig(): { url: string; anonKey: string } {
     localStorage.getItem(LEGACY_SB_KEY) ||
     '';
 
-  const url = (savedUrl || ENV_SUPABASE_URL).trim().replace(/\/+$/, '');
+  const url = cleanSupabaseBaseUrl(savedUrl || ENV_SUPABASE_URL);
   const anonKey = (savedKey || ENV_SUPABASE_ANON_KEY).trim();
 
   return { url, anonKey };
@@ -83,7 +100,7 @@ export function getSupabaseConfig(): { url: string; anonKey: string } {
 
 export function saveSupabaseConfig(url: string, anonKey: string): void {
   if (typeof window === 'undefined') return;
-  const cleanUrl = url.trim().replace(/\/+$/, '');
+  const cleanUrl = cleanSupabaseBaseUrl(url);
   const cleanKey = anonKey.trim();
 
   if (cleanUrl) {
@@ -113,6 +130,27 @@ function getHeaders(anonKey: string, extra?: Record<string, string>): Record<str
   };
 }
 
+async function fetchWithKeyFallback(
+  url: string,
+  primaryKey: string,
+  init: Omit<RequestInit, 'headers'>,
+  extraHeaders?: Record<string, string>
+): Promise<Response> {
+  const res = await fetch(url, {
+    ...init,
+    headers: getHeaders(primaryKey, extraHeaders),
+  });
+
+  if (res.status === 401 && primaryKey !== BUILTIN_SUPABASE_PUBLISHABLE_KEY) {
+    return fetch(url, {
+      ...init,
+      headers: getHeaders(BUILTIN_SUPABASE_PUBLISHABLE_KEY, extraHeaders),
+    });
+  }
+
+  return res;
+}
+
 export const supabaseSyncService = {
   /**
    * Fetch a family room by room_code from `care_family_rooms`.
@@ -133,10 +171,7 @@ export const supabaseSyncService = {
 
     try {
       const endpoint = `${url}/rest/v1/care_family_rooms?room_code=eq.${encodeURIComponent(cleanCode)}&select=*`;
-      const res = await fetch(endpoint, {
-        method: 'GET',
-        headers: getHeaders(anonKey),
-      });
+      const res = await fetchWithKeyFallback(endpoint, anonKey, { method: 'GET' });
 
       if (res.ok) {
         const rows = await res.json();
@@ -150,12 +185,10 @@ export const supabaseSyncService = {
       // If care_family_rooms table does not exist yet, try fallback table `inspections`
       if (res.status === 404 || errBody.includes('PGRST205') || errBody.includes('care_family_rooms')) {
         const fallbackId = `carecircle_room_${cleanCode}`;
-        const fbRes = await fetch(
+        const fbRes = await fetchWithKeyFallback(
           `${url}/rest/v1/inspections?id=eq.${encodeURIComponent(fallbackId)}&select=*`,
-          {
-            method: 'GET',
-            headers: getHeaders(anonKey),
-          }
+          anonKey,
+          { method: 'GET' }
         );
 
         if (fbRes.ok) {
@@ -219,13 +252,17 @@ export const supabaseSyncService = {
 
     try {
       const endpoint = `${url}/rest/v1/care_family_rooms?on_conflict=room_code`;
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: getHeaders(anonKey, {
+      const res = await fetchWithKeyFallback(
+        endpoint,
+        anonKey,
+        {
+          method: 'POST',
+          body: JSON.stringify(record),
+        },
+        {
           Prefer: 'resolution=merge-duplicates,return=minimal',
-        }),
-        body: JSON.stringify(record),
-      });
+        }
+      );
 
       if (res.ok) {
         return { success: true, updatedAt: nowIso };
@@ -235,18 +272,22 @@ export const supabaseSyncService = {
       if (res.status === 404 || errBody.includes('PGRST205') || errBody.includes('care_family_rooms')) {
         // Try fallback to `public.inspections` if user shares the same Supabase project
         const fallbackId = `carecircle_room_${cleanCode}`;
-        const fbRes = await fetch(`${url}/rest/v1/inspections?on_conflict=id`, {
-          method: 'POST',
-          headers: getHeaders(anonKey, {
+        const fbRes = await fetchWithKeyFallback(
+          `${url}/rest/v1/inspections?on_conflict=id`,
+          anonKey,
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              id: fallbackId,
+              property_address: familyName || 'Family Care Hub',
+              report_json: record.ledger_json,
+              updated_at: nowIso,
+            }),
+          },
+          {
             Prefer: 'resolution=merge-duplicates,return=minimal',
-          }),
-          body: JSON.stringify({
-            id: fallbackId,
-            property_address: familyName || 'Family Care Hub',
-            report_json: record.ledger_json,
-            updated_at: nowIso,
-          }),
-        });
+          }
+        );
 
         if (fbRes.ok) {
           return { success: true, updatedAt: nowIso };
@@ -268,3 +309,4 @@ export const supabaseSyncService = {
     }
   },
 };
+
