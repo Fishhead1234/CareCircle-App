@@ -917,6 +917,9 @@ export const useCareStore = create<CareStoreState>((set, get) => {
     addCaregiverShift: (shift, autoCreateExpense) => {
       const shiftId = `sh_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
       let linkedExpenseId: string | undefined;
+      const rateType = shift.rateType || 'HOURLY';
+      const unitLabel = get().t(`unit_${rateType}`, 'hr');
+      const cur = get().currencySymbol;
 
       if (autoCreateExpense && shift.totalPay > 0) {
         linkedExpenseId = get().addExpense({
@@ -928,11 +931,11 @@ export const useCareStore = create<CareStoreState>((set, get) => {
           paidByMemberId: shift.paidByMemberId,
           insuranceClaimStatus: 'NOT_SUBMITTED',
           isTaxDeductible: true,
-          notes: `${shift.hours}h @ $${shift.hourlyRate}/hr. ${shift.vitalsOrNotes}`,
+          notes: `${shift.hours} ${unitLabel} × ${cur}${shift.hourlyRate}/${unitLabel}. ${shift.vitalsOrNotes}`,
           lineItems: [
             {
               id: `li_${Date.now()}`,
-              description: `${shift.caregiverName} (${shift.hours}h @ $${shift.hourlyRate}/hr)`,
+              description: `${shift.caregiverName} (${shift.hours} ${unitLabel} × ${cur}${shift.hourlyRate}/${unitLabel})`,
               quantity: shift.hours,
               unitPrice: shift.hourlyRate,
               total: shift.totalPay,

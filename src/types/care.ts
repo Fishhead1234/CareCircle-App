@@ -68,6 +68,8 @@ export interface PoolSettlement {
   note?: string;
 }
 
+export type CaregiverRateType = 'HOURLY' | 'DAILY' | 'WEEKLY' | 'MONTHLY';
+
 export interface CaregiverShift {
   id: string;
   caregiverName: string;
@@ -75,7 +77,10 @@ export interface CaregiverShift {
   date: string;
   startTime: string;
   endTime: string;
+  rateType?: CaregiverRateType;
+  /** Number of hours, days, weeks, or months depending on rateType */
   hours: number;
+  /** Rate per hour, day, week, or month depending on rateType */
   hourlyRate: number;
   totalPay: number;
   paidByMemberId: string;

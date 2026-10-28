@@ -2,12 +2,14 @@ import React, { useState } from 'react';
 import {
   Pill,
   Clock,
-  CheckCircle2,
   Plus,
   AlertTriangle,
   Trash2,
 } from 'lucide-react';
 import { useCareStore } from '../../store/careStore';
+import { CaregiverRateType } from '../../types/care';
+
+const RATE_TYPES: CaregiverRateType[] = ['DAILY', 'MONTHLY', 'WEEKLY', 'HOURLY'];
 
 export const CaregiverAndMedsScreen: React.FC = () => {
   const {
@@ -27,12 +29,13 @@ export const CaregiverAndMedsScreen: React.FC = () => {
   const [showAddShift, setShowAddShift] = useState(false);
   const [showAddMed, setShowAddMed] = useState(false);
 
-  // Simple Shift state
+  // Caregiver Shift / Fee state (supports Daily, Monthly/Lump Sum, Weekly, Hourly)
   const [caregiverName, setCaregiverName] = useState('');
   const [shiftDate, setShiftDate] = useState(new Date().toISOString().split('T')[0]);
-  const [hours, setHours] = useState('6');
-  const [hourlyRate, setHourlyRate] = useState('35');
-  const [paidByMemberId, setPaidByMemberId] = useState(members[0]?.id || 'mem_sarah');
+  const [rateType, setRateType] = useState<CaregiverRateType>('DAILY');
+  const [quantity, setQuantity] = useState('1');
+  const [unitRate, setUnitRate] = useState('2800');
+  const [paidByMemberId, setPaidByMemberId] = useState<string>('SHARED_POOL');
   const [vitalsOrNotes, setVitalsOrNotes] = useState('');
   const [autoCreateBill, setAutoCreateBill] = useState(true);
 
@@ -44,11 +47,20 @@ export const CaregiverAndMedsScreen: React.FC = () => {
 
   const memberMap = new Map(members.map((m) => [m.id, m]));
 
+  const handleSelectRateType = (nextType: CaregiverRateType) => {
+    setRateType(nextType);
+    if (nextType === 'MONTHLY' || nextType === 'WEEKLY') {
+      setQuantity('1');
+    }
+  };
+
+  const computedTotalPay = (parseFloat(quantity) || 0) * (parseFloat(unitRate) || 0);
+
   const handleCreateShift = (e: React.FormEvent) => {
     e.preventDefault();
-    const h = parseFloat(hours) || 0;
-    const rate = parseFloat(hourlyRate) || 0;
-    if (!caregiverName.trim() || h <= 0) return;
+    const q = parseFloat(quantity) || 0;
+    const rate = parseFloat(unitRate) || 0;
+    if (!caregiverName.trim() || q <= 0 || rate <= 0) return;
 
     addCaregiverShift(
       {
@@ -56,10 +68,11 @@ export const CaregiverAndMedsScreen: React.FC = () => {
         role: '',
         date: shiftDate,
         startTime: '09:00',
-        endTime: '15:00',
-        hours: h,
+        endTime: '17:00',
+        rateType,
+        hours: q,
         hourlyRate: rate,
-        totalPay: h * rate,
+        totalPay: Math.round(q * rate * 100) / 100,
         paidByMemberId,
         tasksCompleted: [],
         vitalsOrNotes: vitalsOrNotes.trim(),
@@ -112,7 +125,6 @@ export const CaregiverAndMedsScreen: React.FC = () => {
             onClick={() => setShowAddMed(!showAddMed)}
             className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs cursor-pointer shrink-0"
           >
-            <Plus className="w-3.5 h-3.5" />
             <span>{t('add_med_btn')}</span>
           </button>
         </div>
@@ -232,7 +244,7 @@ export const CaregiverAndMedsScreen: React.FC = () => {
         </div>
       </div>
 
-      {/* 2. Caregiver Shift Hours */}
+      {/* 2. Caregiver Shifts & Fees (Daily / Weekly / Monthly Lump Sum / Hourly) */}
       <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4 shadow-sm">
         <div className="flex items-center justify-between gap-2 mb-3">
           <div>
@@ -259,7 +271,33 @@ export const CaregiverAndMedsScreen: React.FC = () => {
             onSubmit={handleCreateShift}
             className="mb-4 p-3.5 rounded-2xl bg-purple-500/5 border border-purple-500/20 space-y-3"
           >
-            <div className="grid grid-cols-2 gap-2.5">
+            {/* Billing Rate Type Pills: Daily, Monthly/Lump Sum, Weekly, Hourly */}
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1.5">
+                {t('rate_type_label', 'Billing Type')}
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                {RATE_TYPES.map((rt) => {
+                  const active = rateType === rt;
+                  return (
+                    <button
+                      key={rt}
+                      type="button"
+                      onClick={() => handleSelectRateType(rt)}
+                      className={`px-2.5 py-2 rounded-xl border text-xs font-extrabold transition cursor-pointer ${
+                        active
+                          ? 'border-purple-600 bg-purple-600 text-white shadow-sm'
+                          : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300'
+                      }`}
+                    >
+                      {t(`rate_${rt}`, rt)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <div>
                 <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
                   {t('caregiver_name')}
@@ -269,7 +307,7 @@ export const CaregiverAndMedsScreen: React.FC = () => {
                   required
                   value={caregiverName}
                   onChange={(e) => setCaregiverName(e.target.value)}
-                  placeholder="林美玲 / Maria"
+                  placeholder="林美玲 / Maria / First Helper"
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
                 />
               </div>
@@ -286,27 +324,31 @@ export const CaregiverAndMedsScreen: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
               <div>
                 <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
-                  {t('shift_hours')}
+                  {t(`qty_${rateType}`, 'Quantity')}
                 </label>
                 <input
                   type="number"
                   step="0.5"
-                  value={hours}
-                  onChange={(e) => setHours(e.target.value)}
+                  min="0.5"
+                  required
+                  value={quantity}
+                  onChange={(e) => setQuantity(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono font-bold text-slate-900 dark:text-white"
                 />
               </div>
               <div>
                 <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
-                  {t('hourly_rate')} ({currencySymbol})
+                  {t(`price_${rateType}`, 'Rate')} ({currencySymbol})
                 </label>
                 <input
                   type="number"
-                  value={hourlyRate}
-                  onChange={(e) => setHourlyRate(e.target.value)}
+                  step="0.01"
+                  required
+                  value={unitRate}
+                  onChange={(e) => setUnitRate(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono font-bold text-slate-900 dark:text-white"
                 />
               </div>
@@ -319,6 +361,7 @@ export const CaregiverAndMedsScreen: React.FC = () => {
                   onChange={(e) => setPaidByMemberId(e.target.value)}
                   className="w-full px-2.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-900 dark:text-white"
                 >
+                  <option value="SHARED_POOL">{t('shared_pool_payer')}</option>
                   {members.map((m) => (
                     <option key={m.id} value={m.id}>
                       {m.name}
@@ -336,7 +379,7 @@ export const CaregiverAndMedsScreen: React.FC = () => {
               className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
             />
 
-            <div className="flex items-center justify-between pt-1">
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
               <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
                 <input
                   type="checkbox"
@@ -347,19 +390,31 @@ export const CaregiverAndMedsScreen: React.FC = () => {
                 <span>{t('auto_add_bill')}</span>
               </label>
 
-              <button
-                type="submit"
-                className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs cursor-pointer"
-              >
-                {t('save_shift_btn')}
-              </button>
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-mono font-black text-purple-700 dark:text-purple-300">
+                  {currencySymbol}
+                  {computedTotalPay.toFixed(0)}
+                </span>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs cursor-pointer"
+                >
+                  {t('save_shift_btn')}
+                </button>
+              </div>
             </div>
           </form>
         )}
 
         <div className="space-y-2.5">
           {shifts.map((sh) => {
-            const payer = memberMap.get(sh.paidByMemberId);
+            const payerName =
+              sh.paidByMemberId === 'SHARED_POOL'
+                ? t('shared_pool_payer')
+                : memberMap.get(sh.paidByMemberId)?.name || '-';
+            const rt = sh.rateType || 'HOURLY';
+            const unitStr = t(`unit_${rt}`, 'hr');
+
             return (
               <div
                 key={sh.id}
@@ -370,11 +425,14 @@ export const CaregiverAndMedsScreen: React.FC = () => {
                     <span className="font-extrabold text-sm text-slate-900 dark:text-white">
                       {sh.caregiverName}
                     </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-700 dark:text-purple-300">
+                      {t(`rate_${rt}`, rt)}
+                    </span>
                     <span className="text-xs font-mono text-slate-500">{sh.date}</span>
                   </div>
                   <div className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
-                    {sh.hours}h × {currencySymbol}
-                    {sh.hourlyRate}/hr • {t('paid_by')} {payer?.name || '-'}
+                    {sh.hours} {unitStr} × {currencySymbol}
+                    {sh.hourlyRate}/{unitStr} • {t('paid_by')} {payerName}
                   </div>
                   {sh.vitalsOrNotes && (
                     <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
