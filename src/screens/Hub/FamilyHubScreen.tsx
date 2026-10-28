@@ -25,6 +25,7 @@ export const FamilyHubScreen: React.FC<FamilyHubScreenProps> = ({ onOpenScanner 
     members,
     expenses,
     currencySymbol,
+    formatAmount,
     setActiveTab,
     updateRecipient,
     updateFamilyMember,
@@ -62,7 +63,7 @@ export const FamilyHubScreen: React.FC<FamilyHubScreenProps> = ({ onOpenScanner 
       date: new Date().toISOString().split('T')[0],
       note: `${memberName} — Shortfall Top-Up`,
     });
-    setSettledToast(`${t('settled_toast')} (+${currencySymbol}${rounded.toFixed(2)} ${memberName})`);
+    setSettledToast(`${t('settled_toast')} (+${currencySymbol}${formatAmount(rounded)} ${memberName})`);
     setTimeout(() => setSettledToast(null), 3200);
   };
 
@@ -129,25 +130,25 @@ export const FamilyHubScreen: React.FC<FamilyHubScreenProps> = ({ onOpenScanner 
 
         {/* Highlighted FUNDS AVAILABLE Box */}
         <div className="rounded-2xl bg-emerald-500/15 border border-emerald-400/30 p-3.5 flex items-center justify-between gap-2">
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-1.5 text-xs font-extrabold text-emerald-200">
-              <Wallet className="w-4 h-4 text-emerald-300" />
-              <span>{t('funds_available_label')}</span>
+              <Wallet className="w-4 h-4 text-emerald-300 shrink-0" />
+              <span className="truncate">{t('funds_available_label')}</span>
             </div>
             <div
-              className={`text-2xl sm:text-3xl font-black font-mono tracking-tight mt-0.5 ${
+              className={`text-2xl sm:text-3xl font-black font-mono tracking-tight mt-0.5 truncate ${
                 pool.fundsAvailable >= 0 ? 'text-emerald-300' : 'text-rose-300'
               }`}
             >
               {pool.fundsAvailable >= 0 ? '+' : '-'}
               {currencySymbol}
-              {Math.abs(pool.fundsAvailable).toFixed(2)}
+              {formatAmount(Math.abs(pool.fundsAvailable))}
             </div>
-            <div className="text-[11px] text-teal-100/80 mt-0.5">
+            <div className="text-[11px] text-teal-100/80 mt-0.5 truncate">
               {t('total_funds_in_label')}:{' '}
               <strong className="font-mono text-white">
                 {currencySymbol}
-                {pool.totalFundsPutIn.toFixed(2)}
+                {formatAmount(pool.totalFundsPutIn)}
               </strong>
             </div>
           </div>
@@ -162,25 +163,31 @@ export const FamilyHubScreen: React.FC<FamilyHubScreenProps> = ({ onOpenScanner 
 
         {/* Out-of-Pocket Expense, Total Billed, Insurance Refund */}
         <div className="grid grid-cols-3 gap-2">
-          <div className="rounded-2xl bg-white/10 p-3 border border-white/10">
-            <div className="text-[10px] text-teal-200 font-bold">{t('total_shared_cost')}</div>
-            <div className="text-base sm:text-lg font-black font-mono mt-0.5">
+          <div className="rounded-2xl bg-white/10 p-2.5 sm:p-3 border border-white/10 min-w-0 overflow-hidden">
+            <div className="text-[10px] leading-tight text-teal-200 font-bold">
+              {t('total_shared_cost')}
+            </div>
+            <div className="text-sm sm:text-lg font-black font-mono mt-1 truncate">
               {currencySymbol}
-              {pool.netOutOfPocket.toFixed(2)}
+              {formatAmount(pool.netOutOfPocket)}
             </div>
           </div>
-          <div className="rounded-2xl bg-white/10 p-3 border border-white/10">
-            <div className="text-[10px] text-teal-200 font-bold">{t('gross_billed')}</div>
-            <div className="text-base sm:text-lg font-black font-mono mt-0.5">
+          <div className="rounded-2xl bg-white/10 p-2.5 sm:p-3 border border-white/10 min-w-0 overflow-hidden">
+            <div className="text-[10px] leading-tight text-teal-200 font-bold">
+              {t('gross_billed')}
+            </div>
+            <div className="text-sm sm:text-lg font-black font-mono mt-1 truncate">
               {currencySymbol}
-              {pool.grossBilled.toFixed(2)}
+              {formatAmount(pool.grossBilled)}
             </div>
           </div>
-          <div className="rounded-2xl bg-white/10 p-3 border border-white/10">
-            <div className="text-[10px] text-teal-200 font-bold">{t('insurance_refund')}</div>
-            <div className="text-base sm:text-lg font-black font-mono text-emerald-300 mt-0.5">
+          <div className="rounded-2xl bg-white/10 p-2.5 sm:p-3 border border-white/10 min-w-0 overflow-hidden">
+            <div className="text-[10px] leading-tight text-teal-200 font-bold">
+              {t('insurance_refund')}
+            </div>
+            <div className="text-sm sm:text-lg font-black font-mono text-emerald-300 mt-1 truncate">
               -{currencySymbol}
-              {pool.insuranceRefund.toFixed(2)}
+              {formatAmount(pool.insuranceRefund)}
             </div>
           </div>
         </div>
@@ -341,22 +348,22 @@ export const FamilyHubScreen: React.FC<FamilyHubScreenProps> = ({ onOpenScanner 
                         </div>
                         <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">
                           {t('contributed_prefix')} {currencySymbol}
-                          {b.totalContributed.toFixed(2)} • {t('fair_share_prefix')}{' '}
+                          {formatAmount(b.totalContributed)} • {t('fair_share_prefix')}{' '}
                           {currencySymbol}
-                          {b.assignedShare.toFixed(2)}
+                          {formatAmount(b.assignedShare)}
                         </div>
                         {(b.directBillsPaid > 0 || b.reimbursedFromPool > 0) && (
                           <div className="flex items-center gap-2 flex-wrap text-[10px] font-mono mt-1">
                             {b.directBillsPaid > 0 && (
                               <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 font-bold">
                                 👛 {t('pocket_unreimbursed_label', 'Out-of-Pocket')}: {currencySymbol}
-                                {b.directBillsPaid.toFixed(0)}
+                                {formatAmount(b.directBillsPaid)}
                               </span>
                             )}
                             {b.reimbursedFromPool > 0 && (
                               <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-bold">
                                 🏦 {t('pool_reimbursed_label', 'Reimbursed from Pool')}: {currencySymbol}
-                                {b.reimbursedFromPool.toFixed(0)}
+                                {formatAmount(b.reimbursedFromPool)}
                               </span>
                             )}
                           </div>
@@ -375,10 +382,10 @@ export const FamilyHubScreen: React.FC<FamilyHubScreenProps> = ({ onOpenScanner 
                         }`}
                       >
                         {hasExcess
-                          ? `+${currencySymbol}${b.netBalance.toFixed(2)}`
+                          ? `+${currencySymbol}${formatAmount(b.netBalance)}`
                           : needsToPay
-                          ? `-${currencySymbol}${Math.abs(b.netBalance).toFixed(2)}`
-                          : `${currencySymbol}0.00`}
+                          ? `-${currencySymbol}${formatAmount(Math.abs(b.netBalance))}`
+                          : `${currencySymbol}0`}
                       </div>
                       <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400">
                         {hasExcess
@@ -406,7 +413,7 @@ export const FamilyHubScreen: React.FC<FamilyHubScreenProps> = ({ onOpenScanner 
                         <ArrowUpRight className="w-3.5 h-3.5" />
                         <span>
                           {t('top_up_shortfall_btn')} ({currencySymbol}
-                          {Math.abs(b.netBalance).toFixed(2)})
+                          {formatAmount(Math.abs(b.netBalance))})
                         </span>
                       </button>
                     </div>
@@ -568,12 +575,12 @@ export const FamilyHubScreen: React.FC<FamilyHubScreenProps> = ({ onOpenScanner 
                     <div className="text-right shrink-0">
                       <div className="text-base font-black font-mono text-slate-900 dark:text-white">
                         {currencySymbol}
-                        {netCost.toFixed(2)}
+                        {formatAmount(netCost)}
                       </div>
                       {exp.insuranceReimbursedAmount > 0 && (
                         <div className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400">
                           -{currencySymbol}
-                          {exp.insuranceReimbursedAmount.toFixed(0)}
+                          {formatAmount(exp.insuranceReimbursedAmount)}
                         </div>
                       )}
                       <button
@@ -594,10 +601,10 @@ export const FamilyHubScreen: React.FC<FamilyHubScreenProps> = ({ onOpenScanner 
                           key={li.id}
                           className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400"
                         >
-                          <span className="truncate pr-2">• {li.description}</span>
+                          <span className="truncate pr-2">• {li.description.replace(/NT\$/g, '$')}</span>
                           <span className="font-mono font-semibold shrink-0">
                             {currencySymbol}
-                            {li.total.toFixed(2)}
+                            {formatAmount(li.total)}
                           </span>
                         </div>
                       ))}

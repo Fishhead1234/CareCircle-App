@@ -145,11 +145,11 @@ export const App: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col">
+    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col">
       {/* Sticky Top Header with Instant Language & Currency Switchers */}
       <header className="sticky top-0 z-30 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800">
-        <div className="max-w-xl mx-auto px-3 h-14 flex items-center justify-between gap-1.5">
-          <div className="flex items-center gap-2 min-w-0 shrink-0">
+        <div className="max-w-xl mx-auto px-2.5 sm:px-3 h-14 flex items-center justify-between gap-1">
+          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 shrink-0">
             <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-2xl bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center text-white shadow-sm shrink-0">
               <HeartHandshake className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
@@ -163,14 +163,14 @@ export const App: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+          <div className="flex items-center gap-1 sm:gap-1.5 min-w-0 shrink-0">
             {deferredInstallPrompt && (
               <button
                 type="button"
                 onClick={handleInstallPwa}
                 className="px-2 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-[11px] font-extrabold cursor-pointer shadow-sm shrink-0"
               >
-                📲 {language === 'zh-TW' ? '安裝 App' : 'Install'}
+                📲 {language === 'zh-TW' ? '安裝' : 'Install'}
               </button>
             )}
             {/* Live Cloud Room Status Pill */}
@@ -197,23 +197,23 @@ export const App: React.FC = () => {
               }`}
             >
               {syncStatus === 'syncing' ? (
-                <RefreshCw className="w-3.5 h-3.5 animate-spin text-teal-600" />
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-teal-600 shrink-0" />
               ) : (
-                <Cloud className="w-3.5 h-3.5" />
+                <Cloud className="w-3.5 h-3.5 shrink-0" />
               )}
-              <span className="max-w-[78px] truncate">
+              <span className="max-w-[68px] sm:max-w-[90px] truncate">
                 {roomCode ? roomCode : 'Room'}
               </span>
             </button>
 
             {/* Currency Dropdown Pill */}
-            <div className="relative flex items-center bg-slate-100 dark:bg-slate-800 rounded-xl px-2 py-1.5 border border-slate-200 dark:border-slate-700">
-              <Coins className="w-3.5 h-3.5 text-amber-500 mr-1 shrink-0" />
+            <div className="relative flex items-center bg-slate-100 dark:bg-slate-800 rounded-xl px-1.5 sm:px-2 py-1.5 border border-slate-200 dark:border-slate-700">
+              <Coins className="hidden sm:block w-3.5 h-3.5 text-amber-500 mr-1 shrink-0" />
               <select
                 aria-label="Currency"
                 value={currencyCode}
                 onChange={(e) => setCurrency(e.target.value)}
-                className="bg-transparent text-xs font-extrabold text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer"
+                className="bg-transparent text-[11px] sm:text-xs font-extrabold text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer"
               >
                 {SUPPORTED_CURRENCIES.map((c) => (
                   <option
@@ -221,20 +221,20 @@ export const App: React.FC = () => {
                     value={c.code}
                     className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
                   >
-                    {c.flag} {c.code} ({c.symbol})
+                    {c.flag} {c.code}
                   </option>
                 ))}
               </select>
             </div>
 
             {/* Language Dropdown Pill */}
-            <div className="relative flex items-center bg-slate-100 dark:bg-slate-800 rounded-xl px-2 py-1.5 border border-slate-200 dark:border-slate-700">
-              <Globe className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 mr-1 shrink-0" />
+            <div className="relative flex items-center bg-slate-100 dark:bg-slate-800 rounded-xl px-1.5 sm:px-2 py-1.5 border border-slate-200 dark:border-slate-700">
+              <Globe className="hidden sm:block w-3.5 h-3.5 text-teal-600 dark:text-teal-400 mr-1 shrink-0" />
               <select
                 aria-label="Language"
                 value={language}
                 onChange={(e) => setLanguage(e.target.value as AppLanguage)}
-                className="bg-transparent text-xs font-extrabold text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer"
+                className="bg-transparent text-[11px] sm:text-xs font-extrabold text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer"
               >
                 {SUPPORTED_LANGUAGES.map((l) => (
                   <option
@@ -251,7 +251,7 @@ export const App: React.FC = () => {
             <button
               onClick={toggleTheme}
               aria-label="Toggle theme"
-              className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+              className="p-1.5 sm:p-2 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer shrink-0"
             >
               {themeMode === 'dark' ? (
                 <Sun className="w-4 h-4 text-amber-400" />

@@ -22,19 +22,39 @@ export const SUPPORTED_LANGUAGES: LanguageOption[] = [
 ];
 
 export const SUPPORTED_CURRENCIES: CurrencyOption[] = [
-  { code: 'TWD', symbol: 'NT$', label: 'TWD (NT$ 台幣)', flag: '🇹🇼' },
-  { code: 'HKD', symbol: 'HK$', label: 'HKD (HK$ 港幣)', flag: '🇭🇰' },
+  { code: 'TWD', symbol: '$', label: 'TWD ($ 台幣)', flag: '🇹🇼' },
+  { code: 'HKD', symbol: '$', label: 'HKD ($ 港幣)', flag: '🇭🇰' },
   { code: 'USD', symbol: '$', label: 'USD ($ 美金)', flag: '🇺🇸' },
-  { code: 'AUD', symbol: 'A$', label: 'AUD (A$ 澳幣)', flag: '🇦🇺' },
-  { code: 'SGD', symbol: 'S$', label: 'SGD (S$ 新幣)', flag: '🇸🇬' },
+  { code: 'AUD', symbol: '$', label: 'AUD ($ 澳幣)', flag: '🇦🇺' },
+  { code: 'SGD', symbol: '$', label: 'SGD ($ 新幣)', flag: '🇸🇬' },
   { code: 'GBP', symbol: '£', label: 'GBP (£ 英鎊)', flag: '🇬🇧' },
   { code: 'EUR', symbol: '€', label: 'EUR (€ 歐元)', flag: '🇪🇺' },
-  { code: 'CAD', symbol: 'CA$', label: 'CAD (CA$ 加幣)', flag: '🇨🇦' },
+  { code: 'CAD', symbol: '$', label: 'CAD ($ 加幣)', flag: '🇨🇦' },
   { code: 'JPY', symbol: '¥', label: 'JPY (¥ 日圓)', flag: '🇯🇵' },
   { code: 'CNY', symbol: '¥', label: 'CNY (¥ 人民幣)', flag: '🇨🇳' },
   { code: 'MYR', symbol: 'RM', label: 'MYR (RM 馬幣)', flag: '🇲🇾' },
   { code: 'KRW', symbol: '₩', label: 'KRW (₩ 韓元)', flag: '🇰🇷' },
 ];
+
+export const ZERO_DECIMAL_CURRENCIES = new Set(['TWD', 'JPY', 'KRW']);
+
+export function formatCurrencyAmount(
+  value: number,
+  currencyCode = 'TWD',
+  currencySymbol = '$'
+): string {
+  const cleanSymbol = currencySymbol === 'NT$' || currencySymbol === 'HK$' || currencySymbol === 'A$' || currencySymbol === 'S$' || currencySymbol === 'CA$'
+    ? '$'
+    : currencySymbol;
+  const num = Number(value) || 0;
+  if (ZERO_DECIMAL_CURRENCIES.has(currencyCode) || Number.isInteger(num)) {
+    return `${cleanSymbol}${Math.round(num).toLocaleString('en-US')}`;
+  }
+  return `${cleanSymbol}${num.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
 
 export const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
   'zh-TW': {

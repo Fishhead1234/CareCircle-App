@@ -10,7 +10,12 @@ import {
   MemberBalanceSummary,
   SuggestedSettlement,
 } from '../types/care';
-import { AppLanguage, TRANSLATIONS, SUPPORTED_CURRENCIES } from '../i18n/translations';
+import {
+  AppLanguage,
+  TRANSLATIONS,
+  SUPPORTED_CURRENCIES,
+  formatCurrencyAmount,
+} from '../i18n/translations';
 import {
   supabaseSyncService,
   normalizeRoomCode,
@@ -61,6 +66,7 @@ interface CareStoreState {
   setActiveTab: (tab: AppTab) => void;
   setLanguage: (lang: AppLanguage) => void;
   setCurrency: (code: string) => void;
+  formatAmount: (val: number) => string;
   t: (key: string, fallback?: string) => string;
   toggleTheme: () => void;
   setGeminiApiKey: (key: string) => void;
@@ -782,8 +788,11 @@ export const useCareStore = create<CareStoreState>((set, get) => {
     activeTab: 'hub',
     language: initialLang,
     themeMode: saved?.themeMode || 'light',
-    currencyCode: saved?.currencyCode || 'USD',
-    currencySymbol: saved?.currencySymbol || '$',
+    currencyCode: saved?.currencyCode || 'TWD',
+    currencySymbol:
+      saved?.currencySymbol && !['NT$', 'HK$', 'A$', 'S$', 'CA$'].includes(saved.currencySymbol)
+        ? saved.currencySymbol
+        : '$',
     geminiApiKey: saved?.geminiApiKey || DEFAULT_GEMINI_KEY,
     isPro: saved?.isPro ?? true,
     isAdmin: saved?.isAdmin ?? false,
@@ -815,6 +824,11 @@ export const useCareStore = create<CareStoreState>((set, get) => {
         set({ currencyCode: found.code, currencySymbol: found.symbol });
         persist();
       }
+    },
+
+    formatAmount: (val) => {
+      const { currencyCode, currencySymbol } = get();
+      return formatCurrencyAmount(val, currencyCode, currencySymbol);
     },
 
     setLanguage: (lang) => {
@@ -1333,6 +1347,11 @@ export const useCareStore = create<CareStoreState>((set, get) => {
       let nextCurrencyCode = s.currencyCode;
       let nextCurrencySymbol = s.currencySymbol;
 
+      const normalizeSymbol = (sym?: string) =>
+        sym === 'NT$' || sym === 'HK$' || sym === 'A$' || sym === 'S$' || sym === 'CA$'
+          ? '$'
+          : sym || '$';
+
       if (localIsDemo && !cloudIsDemo) {
         // New device joining existing family room: replace local demo data with cloud real data
         nextRecipient = cloud.recipient || s.recipient;
@@ -1343,7 +1362,7 @@ export const useCareStore = create<CareStoreState>((set, get) => {
         nextShifts = Array.isArray(cloud.shifts) ? cloud.shifts : [];
         nextMeds = Array.isArray(cloud.medications) ? cloud.medications : [];
         if (cloud.currencyCode) nextCurrencyCode = cloud.currencyCode;
-        if (cloud.currencySymbol) nextCurrencySymbol = cloud.currencySymbol;
+        if (cloud.currencySymbol) nextCurrencySymbol = normalizeSymbol(cloud.currencySymbol);
       } else if (!localIsDemo && cloudIsDemo) {
         // Local has real customized data and cloud only had demo data: keep local real data
       } else {
@@ -1366,7 +1385,7 @@ export const useCareStore = create<CareStoreState>((set, get) => {
         );
         if (cloud.currencyCode && s.currencyCode === 'USD') {
           nextCurrencyCode = cloud.currencyCode;
-          nextCurrencySymbol = cloud.currencySymbol || s.currencySymbol;
+          nextCurrencySymbol = normalizeSymbol(cloud.currencySymbol || s.currencySymbol);
         }
       }
 
@@ -1495,6 +1514,16 @@ export const useCareStore = create<CareStoreState>((set, get) => {
               Array.isArray(cloud.settlements) ? cloud.settlements : []
             );
 
+      const rawCloudSym = cloud.currencySymbol || s.currencySymbol;
+      const normalizedSym =
+        rawCloudSym === 'NT$' ||
+        rawCloudSym === 'HK$' ||
+        rawCloudSym === 'A$' ||
+        rawCloudSym === 'S$' ||
+        rawCloudSym === 'CA$'
+          ? '$'
+          : rawCloudSym;
+
       set({
         recipient: cloud.recipient || s.recipient,
         members: nextMembers,
@@ -1504,7 +1533,7 @@ export const useCareStore = create<CareStoreState>((set, get) => {
         shifts: nextShifts,
         medications: nextMeds,
         currencyCode: cloud.currencyCode || s.currencyCode,
-        currencySymbol: cloud.currencySymbol || s.currencySymbol,
+        currencySymbol: normalizedSym,
         deletedIds: Array.from(allDeleted),
         syncStatus: 'synced',
         lastSyncedAt: cloudUpdatedAt || new Date().toISOString(),

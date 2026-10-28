@@ -15,6 +15,7 @@ export const FundsPoolScreen: React.FC = () => {
     members,
     fundContributions,
     currencySymbol,
+    formatAmount,
     addFundContribution,
     deleteFundContribution,
     getPoolTotals,
@@ -49,7 +50,7 @@ export const FundsPoolScreen: React.FC = () => {
 
     setAmount('');
     setNote('');
-    setToastMsg(`✓ +${currencySymbol}${num.toFixed(0)} (${payer?.name || ''})`);
+    setToastMsg(`✓ +${currencySymbol}${formatAmount(num)} (${payer?.name || ''})`);
     setTimeout(() => setToastMsg(null), 3000);
   };
 
@@ -61,7 +62,7 @@ export const FundsPoolScreen: React.FC = () => {
       date: new Date().toISOString().split('T')[0],
       note: `${memberName} — Shortfall Top-Up`,
     });
-    setToastMsg(`✓ +${currencySymbol}${rounded.toFixed(2)} (${memberName})`);
+    setToastMsg(`✓ +${currencySymbol}${formatAmount(rounded)} (${memberName})`);
     setTimeout(() => setToastMsg(null), 3000);
   };
 
@@ -82,37 +83,37 @@ export const FundsPoolScreen: React.FC = () => {
         {/* Big Funds Available Box */}
         <div className="mt-3 rounded-2xl bg-white/10 p-4 border border-white/15">
           <div className="flex items-center justify-between gap-2">
-            <div>
+            <div className="min-w-0">
               <div className="text-xs font-bold text-emerald-200">
                 {t('funds_available_label')}
               </div>
               <div
-                className={`text-3xl font-black font-mono tracking-tight mt-0.5 ${
+                className={`text-2xl sm:text-3xl font-black font-mono tracking-tight mt-0.5 truncate ${
                   pool.fundsAvailable >= 0 ? 'text-emerald-300' : 'text-rose-300'
                 }`}
               >
                 {pool.fundsAvailable >= 0 ? '+' : '-'}
                 {currencySymbol}
-                {Math.abs(pool.fundsAvailable).toFixed(2)}
+                {formatAmount(Math.abs(pool.fundsAvailable))}
               </div>
               <div className="text-[11px] text-teal-200/80 mt-1">
                 {t('funds_available_sub')}
               </div>
             </div>
 
-            <div className="text-right text-xs font-mono space-y-1 text-teal-100">
+            <div className="text-right text-xs font-mono space-y-1 text-teal-100 shrink-0">
               <div>
                 {t('total_funds_in_label')}:{' '}
                 <strong className="text-white">
                   {currencySymbol}
-                  {pool.totalFundsPutIn.toFixed(2)}
+                  {formatAmount(pool.totalFundsPutIn)}
                 </strong>
               </div>
               <div>
                 {t('total_shared_cost')}:{' '}
                 <strong className="text-amber-200">
                   -{currencySymbol}
-                  {pool.netOutOfPocket.toFixed(2)}
+                  {formatAmount(pool.netOutOfPocket)}
                 </strong>
               </div>
             </div>
@@ -291,10 +292,10 @@ export const FundsPoolScreen: React.FC = () => {
                       }`}
                     >
                       {hasExcess
-                        ? `+${currencySymbol}${b.netBalance.toFixed(2)}`
+                        ? `+${currencySymbol}${formatAmount(b.netBalance)}`
                         : needsToPay
-                        ? `-${currencySymbol}${Math.abs(b.netBalance).toFixed(2)}`
-                        : `${currencySymbol}0.00`}
+                        ? `-${currencySymbol}${formatAmount(Math.abs(b.netBalance))}`
+                        : `${currencySymbol}0`}
                     </div>
                     <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400">
                       {hasExcess
@@ -312,24 +313,24 @@ export const FundsPoolScreen: React.FC = () => {
                       {t('contributed_prefix')}:{' '}
                       <strong>
                         {currencySymbol}
-                        {b.totalContributed.toFixed(2)}
+                        {formatAmount(b.totalContributed)}
                       </strong>{' '}
                       <span className="text-[11px] text-slate-400">
                         ({t('fair_share_prefix')}: {currencySymbol}
-                        {b.assignedShare.toFixed(2)})
+                        {formatAmount(b.assignedShare)})
                       </span>
                     </div>
                     <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[10px]">
                       {b.directBillsPaid > 0 && (
                         <span className="text-amber-700 dark:text-amber-300 font-bold">
                           👛 {t('pocket_unreimbursed_label', 'Out-of-Pocket')}: {currencySymbol}
-                          {b.directBillsPaid.toFixed(0)}
+                          {formatAmount(b.directBillsPaid)}
                         </span>
                       )}
                       {b.reimbursedFromPool > 0 && (
                         <span className="text-emerald-700 dark:text-emerald-300 font-semibold">
                           🏦 {t('pool_reimbursed_label', 'Reimbursed from Pool')}: {currencySymbol}
-                          {b.reimbursedFromPool.toFixed(0)}
+                          {formatAmount(b.reimbursedFromPool)}
                         </span>
                       )}
                     </div>
@@ -350,7 +351,7 @@ export const FundsPoolScreen: React.FC = () => {
                       <ArrowUpRight className="w-3 h-3" />
                       <span>
                         {t('top_up_shortfall_btn')} ({currencySymbol}
-                        {Math.abs(b.netBalance).toFixed(0)})
+                        {formatAmount(Math.abs(b.netBalance))})
                       </span>
                     </button>
                   )}
@@ -406,7 +407,7 @@ export const FundsPoolScreen: React.FC = () => {
                   <div className="flex items-center gap-2.5 shrink-0">
                     <span className="text-sm font-black font-mono text-emerald-600 dark:text-emerald-400">
                       +{currencySymbol}
-                      {fc.amount.toFixed(2)}
+                      {formatAmount(fc.amount)}
                     </span>
                     <button
                       onClick={() => deleteFundContribution(fc.id)}

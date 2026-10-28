@@ -3,9 +3,12 @@
 @tailwind utilities;
 
 @layer base {
+  html,
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', sans-serif;
     -webkit-tap-highlight-color: transparent;
+    overflow-x: hidden;
+    max-width: 100%;
   }
 }
 
