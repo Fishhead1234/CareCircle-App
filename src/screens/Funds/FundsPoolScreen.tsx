@@ -420,3 +420,4 @@ export const FundsPoolScreen: React.FC = () => {
     </div>
   );
 };
+

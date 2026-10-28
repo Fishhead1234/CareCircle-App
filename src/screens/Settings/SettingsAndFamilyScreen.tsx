@@ -438,7 +438,11 @@ export const SettingsAndFamilyScreen: React.FC = () => {
             <span>{t('import_sync_btn')}</span>
           </button>
           <button
-            onClick={resetToDemoData}
+            onClick={() => {
+              if (window.confirm('Restore sample demo data? This will replace your current entries.')) {
+                resetToDemoData();
+              }
+            }}
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-400 cursor-pointer"
           >
             <RefreshCw className="w-3.5 h-3.5" />

@@ -90,7 +90,8 @@ interface CareStoreState {
   clearAllData: () => void;
 }
 
-const STORAGE_KEY = 'carecircle_family_hub_v3';
+const STORAGE_KEY = 'carecircle_family_hub_v2';
+const LEGACY_KEYS = ['carecircle_family_hub_v3', 'carecircle_family_hub_v1'];
 
 const DEMO_DATA_ZH_TW = {
   recipient: {
@@ -661,12 +662,45 @@ const getDemoDataset = (lang: AppLanguage) => {
   return DEMO_DATA_ZH_TW;
 };
 
+const isDefaultDemoData = (parsed: any): boolean => {
+  if (!parsed || !parsed.recipient) return true;
+  const demoNames = new Set([
+    DEMO_DATA_ZH_TW.recipient.name,
+    DEMO_DATA_EN.recipient.name,
+    'Eleanor Vance-Chen',
+  ]);
+  const hasDefaultRecipient = demoNames.has(parsed.recipient.name);
+  const firstMemberName = parsed.members?.[0]?.name;
+  const hasDefaultMembers =
+    firstMemberName === '陳怡君 (大姐)' || firstMemberName === 'Sarah Chen';
+  const hasDefaultExpenses =
+    Array.isArray(parsed.expenses) &&
+    parsed.expenses.length === 4 &&
+    parsed.expenses[0]?.id === 'exp_1';
+  return hasDefaultRecipient && hasDefaultMembers && hasDefaultExpenses;
+};
+
 const loadInitialState = () => {
   try {
-    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
-    if (raw) {
-      return JSON.parse(raw);
-    }
+    if (typeof localStorage === 'undefined') return null;
+
+    const candidates = [STORAGE_KEY, ...LEGACY_KEYS]
+      .map((k) => {
+        const raw = localStorage.getItem(k);
+        if (!raw) return null;
+        try {
+          return JSON.parse(raw);
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean);
+
+    if (candidates.length === 0) return null;
+
+    // Always prefer any candidate where the user has modified live data over untouched demo data
+    const customized = candidates.find((c) => !isDefaultDemoData(c));
+    return customized || candidates[0];
   } catch (e) {
     console.error('Failed to load CareCircle state:', e);
   }
@@ -681,26 +715,25 @@ export const useCareStore = create<CareStoreState>((set, get) => {
   const persist = () => {
     try {
       const s = get();
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({
-          language: s.language,
-          themeMode: s.themeMode,
-          currencyCode: s.currencyCode,
-          currencySymbol: s.currencySymbol,
-          geminiApiKey: s.geminiApiKey,
-          isPro: s.isPro,
-          isAdmin: s.isAdmin,
-          trialStartDate: s.trialStartDate,
-          recipient: s.recipient,
-          members: s.members,
-          fundContributions: s.fundContributions,
-          expenses: s.expenses,
-          settlements: s.settlements,
-          shifts: s.shifts,
-          medications: s.medications,
-        })
-      );
+      const payload = JSON.stringify({
+        language: s.language,
+        themeMode: s.themeMode,
+        currencyCode: s.currencyCode,
+        currencySymbol: s.currencySymbol,
+        geminiApiKey: s.geminiApiKey,
+        isPro: s.isPro,
+        isAdmin: s.isAdmin,
+        trialStartDate: s.trialStartDate,
+        recipient: s.recipient,
+        members: s.members,
+        fundContributions: s.fundContributions,
+        expenses: s.expenses,
+        settlements: s.settlements,
+        shifts: s.shifts,
+        medications: s.medications,
+      });
+      localStorage.setItem(STORAGE_KEY, payload);
+      localStorage.setItem('carecircle_family_hub_v3', payload);
     } catch (e) {
       console.error('Failed to persist CareCircle state:', e);
     }
@@ -718,12 +751,16 @@ export const useCareStore = create<CareStoreState>((set, get) => {
     trialStartDate: saved?.trialStartDate || new Date().toISOString(),
 
     recipient: saved?.recipient || initialDemo.recipient,
-    members: saved?.members || initialDemo.members,
-    fundContributions: saved?.fundContributions || initialDemo.fundContributions,
-    expenses: saved?.expenses || initialDemo.expenses,
-    settlements: saved?.settlements || [],
-    shifts: saved?.shifts || initialDemo.shifts,
-    medications: saved?.medications || initialDemo.medications,
+    members: Array.isArray(saved?.members) ? saved.members : initialDemo.members,
+    fundContributions: Array.isArray(saved?.fundContributions)
+      ? saved.fundContributions
+      : saved
+      ? []
+      : initialDemo.fundContributions,
+    expenses: Array.isArray(saved?.expenses) ? saved.expenses : initialDemo.expenses,
+    settlements: Array.isArray(saved?.settlements) ? saved.settlements : [],
+    shifts: Array.isArray(saved?.shifts) ? saved.shifts : initialDemo.shifts,
+    medications: Array.isArray(saved?.medications) ? saved.medications : initialDemo.medications,
 
     setActiveTab: (tab) => set({ activeTab: tab }),
 
@@ -736,26 +773,8 @@ export const useCareStore = create<CareStoreState>((set, get) => {
     },
 
     setLanguage: (lang) => {
-      const current = get();
-      const isStillDemoRecipient =
-        current.recipient.name === DEMO_DATA_ZH_TW.recipient.name ||
-        current.recipient.name === DEMO_DATA_EN.recipient.name ||
-        current.recipient.name === 'Eleanor Vance-Chen';
-
-      if (isStillDemoRecipient && current.expenses.length <= 5) {
-        const nextDemo = getDemoDataset(lang);
-        set({
-          language: lang,
-          recipient: nextDemo.recipient,
-          members: nextDemo.members,
-          fundContributions: nextDemo.fundContributions,
-          expenses: nextDemo.expenses,
-          shifts: nextDemo.shifts,
-          medications: nextDemo.medications,
-        });
-      } else {
-        set({ language: lang });
-      }
+      // Never overwrite user data when switching UI language
+      set({ language: lang });
       persist();
     },
 
