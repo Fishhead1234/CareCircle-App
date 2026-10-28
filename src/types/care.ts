@@ -171,3 +171,4 @@ export const EXPENSE_CATEGORY_META: Record<
     taxNote: 'Diagnostic X-Ray, MRI & Blood Panels',
   },
 };
+

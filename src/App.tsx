@@ -7,7 +7,10 @@ import {
   Users,
   Sun,
   Moon,
+  Plus,
 } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
+import { StatusBar, Style } from '@capacitor/status-bar';
 import { useCareStore, AppTab } from './store/careStore';
 import { FamilyHubScreen } from './screens/Hub/FamilyHubScreen';
 import { CaregiverAndMedsScreen } from './screens/CareLog/CaregiverAndMedsScreen';
@@ -23,6 +26,15 @@ export const App: React.FC = () => {
   useEffect(() => {
     const isDark = themeMode === 'dark';
     document.documentElement.classList.toggle('dark', isDark);
+    document.body.style.backgroundColor = isDark ? '#0B1120' : '#F4F6F9';
+
+    if (Capacitor.isNativePlatform()) {
+      StatusBar.setOverlaysWebView({ overlay: false }).catch(() => {});
+      StatusBar.setStyle({ style: isDark ? Style.Dark : Style.Light }).catch(() => {});
+      StatusBar.setBackgroundColor({ color: isDark ? '#0B1120' : '#F4F6F9' }).catch(
+        () => {}
+      );
+    }
   }, [themeMode]);
 
   const lowRefillCount = medications.filter(
@@ -55,44 +67,45 @@ export const App: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-[#F4F6F9] dark:bg-[#0B1120] text-slate-900 dark:text-slate-100 flex flex-col items-center">
-      <div className="w-full max-w-lg min-h-screen flex flex-col bg-[#F4F6F9] dark:bg-[#0B1120] shadow-xl relative">
+    <div className="min-h-screen w-full bg-[#E5E9F0] dark:bg-[#060A14] text-slate-900 dark:text-slate-100 flex justify-center items-stretch overflow-x-hidden">
+      {/* Mobile-First Phone Shell: 100% width on phones, sleek centered mobile frame on desktop/Vercel */}
+      <div className="w-full sm:max-w-md min-h-screen flex flex-col bg-[#F4F6F9] dark:bg-[#0B1120] sm:shadow-2xl sm:border-x sm:border-slate-200/80 dark:sm:border-slate-800/80 relative overflow-x-hidden">
         {/* Top App Bar */}
         <header className="sticky top-0 z-30 px-4 py-3 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-teal-600 to-emerald-500 text-white flex items-center justify-center shadow-sm">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-teal-600 to-emerald-500 text-white flex items-center justify-center shadow-sm shrink-0">
               <HeartHandshake className="w-5 h-5" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-1.5">
-                <span className="font-extrabold text-sm tracking-tight text-slate-900 dark:text-white">
+                <span className="font-extrabold text-sm tracking-tight text-slate-900 dark:text-white truncate">
                   CareCircle
                 </span>
-                <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-teal-500/15 text-teal-600 dark:text-teal-400">
-                  AI HUB
+                <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-teal-500/15 text-teal-600 dark:text-teal-400 shrink-0">
+                  FAMILY HUB
                 </span>
               </div>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                Family Caregiver &amp; Medical Expense Coordinator
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                Caregiver &amp; Medical Expense Coordinator
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <button
               type="button"
               onClick={() => setIsScannerOpen(true)}
-              className="min-h-[38px] px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-sm transition cursor-pointer active:scale-95"
+              className="min-h-[42px] px-3.5 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-sm transition cursor-pointer active:scale-95"
             >
-              <Camera className="w-3.5 h-3.5" />
-              <span>Scan Bill</span>
+              <Camera className="w-4 h-4" />
+              <span>Snap Bill</span>
             </button>
 
             <button
               type="button"
               onClick={toggleTheme}
               title="Toggle Light / Dark Theme"
-              className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center transition cursor-pointer"
+              className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center transition cursor-pointer active:scale-95"
             >
               {themeMode === 'light' ? (
                 <Moon className="w-4 h-4" />
@@ -104,7 +117,7 @@ export const App: React.FC = () => {
         </header>
 
         {/* Main Screen Container */}
-        <main className="flex-1 px-4 pt-4">
+        <main className="flex-1 px-3.5 pt-3.5">
           {activeTab === 'hub' && (
             <FamilyHubScreen onOpenScanner={() => setIsScannerOpen(true)} />
           )}
@@ -113,8 +126,38 @@ export const App: React.FC = () => {
           {activeTab === 'settings' && <SettingsAndFamilyScreen />}
         </main>
 
-        {/* Bottom Navigation Bar */}
-        <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-lg z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200/80 dark:border-slate-800 px-2 py-1.5 flex items-center justify-around">
+        {/* Persistent Thumb-Zone Quick Action Bar (Easy 1-Handed Mobile Reach) */}
+        <div className="sticky bottom-[64px] left-0 right-0 px-3.5 pb-2 z-20 pointer-events-none">
+          <div className="pointer-events-auto p-2 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/90 dark:border-slate-800 shadow-lg flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsScannerOpen(true)}
+              className="flex-1 min-h-[44px] px-3 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-extrabold flex items-center justify-center gap-1.5 shadow-xs transition cursor-pointer active:scale-95"
+            >
+              <Camera className="w-4 h-4" />
+              <span>+ Snap Medical Bill</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('carelog')}
+              className="min-h-[44px] px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold flex items-center justify-center gap-1 transition cursor-pointer active:scale-95"
+            >
+              <Plus className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+              <span>Log Shift / Rx</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('reports')}
+              className="min-h-[44px] px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold flex items-center justify-center gap-1 transition cursor-pointer active:scale-95"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+              <span>PDF</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Bottom Navigation Bar (48px+ touch targets) */}
+        <nav className="sticky bottom-0 left-0 right-0 w-full z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200/80 dark:border-slate-800 px-2 py-1.5 pb-[max(0.375rem,env(safe-area-inset-bottom))] flex items-center justify-around">
           {navItems.map((item) => {
             const active = activeTab === item.id;
             return (
@@ -122,10 +165,10 @@ export const App: React.FC = () => {
                 key={item.id}
                 type="button"
                 onClick={() => setActiveTab(item.id)}
-                className={`relative flex-1 py-1.5 rounded-xl flex flex-col items-center justify-center gap-0.5 transition cursor-pointer ${
+                className={`relative flex-1 min-h-[48px] py-1.5 rounded-xl flex flex-col items-center justify-center gap-0.5 transition cursor-pointer active:scale-95 ${
                   active
-                    ? 'text-teal-600 dark:text-teal-400 font-extrabold'
-                    : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 font-medium'
+                    ? 'text-teal-600 dark:text-teal-400 font-extrabold bg-teal-500/10'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 font-medium'
                 }`}
               >
                 <div className="relative">
@@ -142,7 +185,7 @@ export const App: React.FC = () => {
                     </span>
                   )}
                 </div>
-                <span className="text-[11px]">{item.label}</span>
+                <span className="text-[11px] leading-tight">{item.label}</span>
               </button>
             );
           })}

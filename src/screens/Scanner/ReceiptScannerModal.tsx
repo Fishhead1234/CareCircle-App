@@ -522,3 +522,4 @@ export const ReceiptScannerModal: React.FC<Props> = ({ onClose }) => {
     </div>
   );
 };
+

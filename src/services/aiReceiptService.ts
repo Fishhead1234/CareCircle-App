@@ -300,3 +300,4 @@ Extract the receipt or medical bill details from this image and return ONLY vali
     return SAMPLE_RECEIPT_PRESETS[0].result;
   },
 };
+
