@@ -41,16 +41,13 @@ export const ZERO_DECIMAL_CURRENCIES = new Set(['TWD', 'JPY', 'KRW']);
 export function formatCurrencyAmount(
   value: number,
   currencyCode = 'TWD',
-  currencySymbol = '$'
+  _currencySymbol = '$'
 ): string {
-  const cleanSymbol = currencySymbol === 'NT$' || currencySymbol === 'HK$' || currencySymbol === 'A$' || currencySymbol === 'S$' || currencySymbol === 'CA$'
-    ? '$'
-    : currencySymbol;
   const num = Number(value) || 0;
   if (ZERO_DECIMAL_CURRENCIES.has(currencyCode) || Number.isInteger(num)) {
-    return `${cleanSymbol}${Math.round(num).toLocaleString('en-US')}`;
+    return `${Math.round(num).toLocaleString('en-US')}`;
   }
-  return `${cleanSymbol}${num.toLocaleString('en-US', {
+  return `${num.toLocaleString('en-US', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
