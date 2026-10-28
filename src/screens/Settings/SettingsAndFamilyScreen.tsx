@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   FileText,
   Printer,
@@ -13,7 +13,6 @@ import {
   RefreshCw,
   Globe,
   Coins,
-  KeyRound,
   Lock,
 } from 'lucide-react';
 import { useCareStore } from '../../store/careStore';
@@ -36,9 +35,7 @@ export const SettingsAndFamilyScreen: React.FC = () => {
     setCurrency,
     language,
     setLanguage,
-    geminiApiKey,
     isAdmin,
-    setGeminiApiKey,
     unlockAdmin,
     updateRecipient,
     addFamilyMember,
@@ -58,9 +55,9 @@ export const SettingsAndFamilyScreen: React.FC = () => {
   const [newMemberName, setNewMemberName] = useState('');
   const [newMemberRelation, setNewMemberRelation] = useState('');
 
-  // Sync
-  const [importJsonText, setImportJsonText] = useState('');
-  const [showImportBox, setShowImportBox] = useState(false);
+  // Sync (.json file export & import)
+  const syncFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge');
   const [bannerMsg, setBannerMsg] = useState<string | null>(null);
 
   // Hidden 5-tap Admin unlock
@@ -112,25 +109,39 @@ export const SettingsAndFamilyScreen: React.FC = () => {
     setNewMemberRelation('');
   };
 
-  const handleCopySyncCode = async () => {
+  const handleExportJsonFile = () => {
     const json = exportSyncJson();
-    try {
-      await navigator.clipboard.writeText(json);
-      setBannerMsg('✓ ' + t('copy_sync_btn'));
-    } catch {
-      setBannerMsg('✓ Copied');
-    }
-    setTimeout(() => setBannerMsg(null), 3000);
+    const dateStr = new Date().toISOString().split('T')[0];
+    const safeName = (recipient.name || 'Family').replace(/[^a-zA-Z0-9\u4e00-\u9fa5_-]/g, '_');
+    const fileName = `CareCircle_${safeName}_${dateStr}.json`;
+
+    const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    setBannerMsg(`✓ Downloaded ${fileName}`);
+    setTimeout(() => setBannerMsg(null), 3500);
   };
 
-  const handleImportSync = () => {
-    const res = importSyncJson(importJsonText);
-    setBannerMsg(res.message);
-    if (res.success) {
-      setShowImportBox(false);
-      setImportJsonText('');
-    }
-    setTimeout(() => setBannerMsg(null), 3000);
+  const handleImportJsonFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const content = String(reader.result || '');
+      const res = importSyncJson(content, importMode);
+      setBannerMsg(res.message);
+      setTimeout(() => setBannerMsg(null), 4000);
+    };
+    reader.readAsText(file);
+    e.target.value = '';
   };
 
   const handleVersionTap = () => {
@@ -410,7 +421,7 @@ export const SettingsAndFamilyScreen: React.FC = () => {
         </div>
       </div>
 
-      {/* 5. Family Sync Code & Demo Reset */}
+      {/* 5. Family Sync (.json Export & Import) & Demo Reset */}
       <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4 shadow-sm space-y-3">
         <div>
           <h3 className="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-1.5">
@@ -422,65 +433,71 @@ export const SettingsAndFamilyScreen: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        {/* Import Mode Selector: Smart Merge vs Full Replace */}
+        <div className="flex flex-wrap items-center gap-2 text-[11px]">
           <button
-            onClick={handleCopySyncCode}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs cursor-pointer"
+            type="button"
+            onClick={() => setImportMode('merge')}
+            className={`px-2.5 py-1.5 rounded-lg border font-bold cursor-pointer transition ${
+              importMode === 'merge'
+                ? 'border-teal-600 bg-teal-500/10 text-teal-700 dark:text-teal-300'
+                : 'border-slate-200 dark:border-slate-700 text-slate-500'
+            }`}
           >
-            <Share2 className="w-3.5 h-3.5" />
-            <span>{t('copy_sync_btn')}</span>
+            ✓ {t('sync_merge_mode', 'Smart Merge (Keep new bills from both devices)')}
           </button>
           <button
-            onClick={() => setShowImportBox(!showImportBox)}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer"
+            type="button"
+            onClick={() => setImportMode('replace')}
+            className={`px-2.5 py-1.5 rounded-lg border font-bold cursor-pointer transition ${
+              importMode === 'replace'
+                ? 'border-amber-600 bg-amber-500/10 text-amber-700 dark:text-amber-300'
+                : 'border-slate-200 dark:border-slate-700 text-slate-500'
+            }`}
+          >
+            {t('sync_replace_mode', 'Full Replace')}
+          </button>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={handleExportJsonFile}
+            className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs cursor-pointer shadow-sm"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>{t('copy_sync_btn')}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => syncFileInputRef.current?.click()}
+            className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs cursor-pointer shadow-sm"
           >
             <Upload className="w-3.5 h-3.5" />
             <span>{t('import_sync_btn')}</span>
           </button>
+
+          <input
+            ref={syncFileInputRef}
+            type="file"
+            accept=".json,application/json"
+            onChange={handleImportJsonFile}
+            className="hidden"
+          />
+
           <button
+            type="button"
             onClick={() => {
               if (window.confirm('Restore sample demo data? This will replace your current entries.')) {
                 resetToDemoData();
               }
             }}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-400 cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-400 cursor-pointer"
           >
             <RefreshCw className="w-3.5 h-3.5" />
             <span>{t('restore_demo_btn')}</span>
           </button>
-        </div>
-
-        {showImportBox && (
-          <div className="space-y-2 pt-2">
-            <textarea
-              rows={3}
-              value={importJsonText}
-              onChange={(e) => setImportJsonText(e.target.value)}
-              placeholder="Paste Family Sync JSON..."
-              className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-mono text-slate-900 dark:text-white"
-            />
-            <button
-              onClick={handleImportSync}
-              className="px-4 py-2 rounded-xl bg-teal-600 text-white font-bold text-xs cursor-pointer"
-            >
-              {t('apply_sync_btn')}
-            </button>
-          </div>
-        )}
-
-        {/* Optional Gemini Key */}
-        <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
-          <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 mb-1">
-            <KeyRound className="w-3 h-3" />
-            <span>Gemini API Key (Optional)</span>
-          </label>
-          <input
-            type="password"
-            value={geminiApiKey}
-            onChange={(e) => setGeminiApiKey(e.target.value)}
-            placeholder="AIzaSy..."
-            className="w-full px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-mono text-slate-900 dark:text-white"
-          />
         </div>
       </div>
 

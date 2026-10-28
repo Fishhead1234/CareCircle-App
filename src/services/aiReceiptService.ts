@@ -331,6 +331,9 @@ export const getSampleReceiptPresets = (lang: AppLanguage = 'zh-TW'): SampleRece
 
 export const SAMPLE_RECEIPT_PRESETS = SAMPLE_PRESETS_ZH_TW;
 
+export const BUILTIN_GEMINI_API_KEY: string =
+  (import.meta as any).env?.VITE_GEMINI_API_KEY || '';
+
 export const aiReceiptService = {
   async analyzeReceiptImage(
     imageDataUrl: string,
@@ -338,7 +341,7 @@ export const aiReceiptService = {
     geminiApiKey?: string,
     lang: AppLanguage = 'zh-TW'
   ): Promise<ExtractedReceiptResult> {
-    const cleanKey = geminiApiKey?.trim();
+    const cleanKey = (geminiApiKey?.trim() || BUILTIN_GEMINI_API_KEY).trim();
     const presets = getSampleReceiptPresets(lang);
 
     if (cleanKey && imageDataUrl.startsWith('data:image/')) {
@@ -382,57 +385,66 @@ Extract the receipt details from this image and return ONLY valid JSON matching 
   ]
 }`;
 
-          const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${encodeURIComponent(cleanKey)}`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                contents: [
+          const requestBody = JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  { text: prompt },
                   {
-                    parts: [
-                      { text: prompt },
-                      {
-                        inline_data: {
-                          mime_type: mimeType,
-                          data: base64Data,
-                        },
-                      },
-                    ],
+                    inline_data: {
+                      mime_type: mimeType,
+                      data: base64Data,
+                    },
                   },
                 ],
-                generationConfig: {
-                  responseMimeType: 'application/json',
-                  temperature: 0.1,
-                },
-              }),
-            }
-          );
+              },
+            ],
+            generationConfig: {
+              responseMimeType: 'application/json',
+              temperature: 0.1,
+            },
+          });
 
-          if (response.ok) {
-            const json = await response.json();
-            const rawText = json?.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (rawText) {
-              const parsed = JSON.parse(rawText);
-              if (parsed && parsed.providerName && Array.isArray(parsed.lineItems)) {
-                return {
-                  providerName: parsed.providerName,
-                  date: parsed.date || new Date().toISOString().split('T')[0],
-                  category: parsed.category || 'HOSPITAL_CLINIC',
-                  totalAmount: Number(parsed.totalAmount) || 0,
-                  isTaxDeductible: Boolean(parsed.isTaxDeductible ?? true),
-                  aiConfidence: Number(parsed.aiConfidence) || 96,
-                  notes: parsed.notes || '',
-                  lineItems: parsed.lineItems.map((li: any, idx: number) => ({
-                    id: `li_${Date.now()}_${idx}`,
-                    description: String(li.description || 'Item'),
-                    quantity: Number(li.quantity) || 1,
-                    unitPrice: Number(li.unitPrice) || Number(li.total) || 0,
-                    total: Number(li.total) || 0,
-                    isInsuranceEligible: Boolean(li.isInsuranceEligible ?? true),
-                    isTaxDeductible: Boolean(li.isTaxDeductible ?? true),
-                  })),
-                };
+          const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+          for (const modelName of modelsToTry) {
+            const headers: Record<string, string> = {
+              'Content-Type': 'application/json',
+            };
+            const url = cleanKey.startsWith('AQ.')
+              ? `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${encodeURIComponent(cleanKey)}`
+              : `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${encodeURIComponent(cleanKey)}`;
+
+            const response = await fetch(url, {
+              method: 'POST',
+              headers,
+              body: requestBody,
+            });
+
+            if (response.ok) {
+              const json = await response.json();
+              const rawText = json?.candidates?.[0]?.content?.parts?.[0]?.text;
+              if (rawText) {
+                const parsed = JSON.parse(rawText);
+                if (parsed && parsed.providerName && Array.isArray(parsed.lineItems)) {
+                  return {
+                    providerName: parsed.providerName,
+                    date: parsed.date || new Date().toISOString().split('T')[0],
+                    category: parsed.category || 'HOSPITAL_CLINIC',
+                    totalAmount: Number(parsed.totalAmount) || 0,
+                    isTaxDeductible: Boolean(parsed.isTaxDeductible ?? true),
+                    aiConfidence: Number(parsed.aiConfidence) || 96,
+                    notes: parsed.notes || '',
+                    lineItems: parsed.lineItems.map((li: any, idx: number) => ({
+                      id: `li_${Date.now()}_${idx}`,
+                      description: String(li.description || 'Item'),
+                      quantity: Number(li.quantity) || 1,
+                      unitPrice: Number(li.unitPrice) || Number(li.total) || 0,
+                      total: Number(li.total) || 0,
+                      isInsuranceEligible: Boolean(li.isInsuranceEligible ?? true),
+                      isTaxDeductible: Boolean(li.isTaxDeductible ?? true),
+                    })),
+                  };
+                }
               }
             }
           }

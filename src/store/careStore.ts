@@ -85,13 +85,17 @@ interface CareStoreState {
 
   // Sync / Backup
   exportSyncJson: () => string;
-  importSyncJson: (rawJson: string) => { success: boolean; message: string };
+  importSyncJson: (
+    rawJson: string,
+    mode?: 'merge' | 'replace'
+  ) => { success: boolean; message: string };
   resetToDemoData: () => void;
   clearAllData: () => void;
 }
 
 const STORAGE_KEY = 'carecircle_family_hub_v2';
 const LEGACY_KEYS = ['carecircle_family_hub_v3', 'carecircle_family_hub_v1'];
+const DEFAULT_GEMINI_KEY: string = (import.meta as any).env?.VITE_GEMINI_API_KEY || '';
 
 const DEMO_DATA_ZH_TW = {
   recipient: {
@@ -745,7 +749,7 @@ export const useCareStore = create<CareStoreState>((set, get) => {
     themeMode: saved?.themeMode || 'light',
     currencyCode: saved?.currencyCode || 'USD',
     currencySymbol: saved?.currencySymbol || '$',
-    geminiApiKey: saved?.geminiApiKey || '',
+    geminiApiKey: saved?.geminiApiKey || DEFAULT_GEMINI_KEY,
     isPro: saved?.isPro ?? true,
     isAdmin: saved?.isAdmin ?? false,
     trialStartDate: saved?.trialStartDate || new Date().toISOString(),
@@ -1197,35 +1201,80 @@ export const useCareStore = create<CareStoreState>((set, get) => {
       );
     },
 
-    importSyncJson: (rawJson) => {
+    importSyncJson: (rawJson, mode = 'merge') => {
       try {
         const parsed = JSON.parse(rawJson);
         if (!parsed || !Array.isArray(parsed.members) || !Array.isArray(parsed.expenses)) {
           return {
             success: false,
-            message: 'Invalid CareCircle sync code.',
+            message: 'Invalid CareCircle .json file.',
           };
         }
+
+        const mergeById = <T extends { id: string }>(current: T[], incoming: T[]): T[] => {
+          const map = new Map<string, T>();
+          current.forEach((item) => map.set(item.id, item));
+          incoming.forEach((item) => map.set(item.id, item));
+          return Array.from(map.values());
+        };
+
+        if (mode === 'replace') {
+          set({
+            recipient: parsed.recipient || get().recipient,
+            members: parsed.members,
+            fundContributions: Array.isArray(parsed.fundContributions)
+              ? parsed.fundContributions
+              : [],
+            expenses: parsed.expenses,
+            settlements: Array.isArray(parsed.settlements) ? parsed.settlements : [],
+            shifts: Array.isArray(parsed.shifts) ? parsed.shifts : [],
+            medications: Array.isArray(parsed.medications) ? parsed.medications : [],
+          });
+          persist();
+          return {
+            success: true,
+            message: `✓ Imported & replaced (${parsed.expenses.length} bills)`,
+          };
+        }
+
+        const current = get();
+        const mergedExpenses = mergeById(current.expenses, parsed.expenses);
+        const mergedFunds = mergeById(
+          current.fundContributions,
+          Array.isArray(parsed.fundContributions) ? parsed.fundContributions : []
+        );
+        const mergedShifts = mergeById(
+          current.shifts,
+          Array.isArray(parsed.shifts) ? parsed.shifts : []
+        );
+        const mergedMeds = mergeById(
+          current.medications,
+          Array.isArray(parsed.medications) ? parsed.medications : []
+        );
+        const mergedMembers = mergeById(current.members, parsed.members);
+        const mergedSettlements = mergeById(
+          current.settlements,
+          Array.isArray(parsed.settlements) ? parsed.settlements : []
+        );
+
         set({
-          recipient: parsed.recipient || get().recipient,
-          members: parsed.members,
-          fundContributions: Array.isArray(parsed.fundContributions)
-            ? parsed.fundContributions
-            : [],
-          expenses: parsed.expenses,
-          settlements: Array.isArray(parsed.settlements) ? parsed.settlements : [],
-          shifts: Array.isArray(parsed.shifts) ? parsed.shifts : [],
-          medications: Array.isArray(parsed.medications) ? parsed.medications : [],
+          recipient: parsed.recipient || current.recipient,
+          members: mergedMembers,
+          fundContributions: mergedFunds,
+          expenses: mergedExpenses,
+          settlements: mergedSettlements,
+          shifts: mergedShifts,
+          medications: mergedMeds,
         });
         persist();
         return {
           success: true,
-          message: `OK (${parsed.expenses.length})`,
+          message: `✓ Smart Merged (${mergedExpenses.length} total bills, ${mergedFunds.length} fund entries)`,
         };
       } catch (e) {
         return {
           success: false,
-          message: 'Error parsing sync code.',
+          message: 'Error parsing .json file.',
         };
       }
     },
