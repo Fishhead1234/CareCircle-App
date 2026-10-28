@@ -35,7 +35,8 @@ export const CaregiverAndMedsScreen: React.FC = () => {
   const [rateType, setRateType] = useState<CaregiverRateType>('DAILY');
   const [quantity, setQuantity] = useState('1');
   const [unitRate, setUnitRate] = useState('2800');
-  const [paidByMemberId, setPaidByMemberId] = useState<string>('SHARED_POOL');
+  const [paidByMemberId, setPaidByMemberId] = useState<string>(members[0]?.id || 'mem_sarah');
+  const [paidFrom, setPaidFrom] = useState<'FUND_POOL' | 'OUT_OF_POCKET'>('FUND_POOL');
   const [vitalsOrNotes, setVitalsOrNotes] = useState('');
   const [autoCreateBill, setAutoCreateBill] = useState(true);
 
@@ -74,6 +75,7 @@ export const CaregiverAndMedsScreen: React.FC = () => {
         hourlyRate: rate,
         totalPay: Math.round(q * rate * 100) / 100,
         paidByMemberId,
+        paidFrom,
         tasksCompleted: [],
         vitalsOrNotes: vitalsOrNotes.trim(),
       },
@@ -324,7 +326,7 @@ export const CaregiverAndMedsScreen: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <div>
                 <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
                   {t(`qty_${rateType}`, 'Quantity')}
@@ -352,21 +354,40 @@ export const CaregiverAndMedsScreen: React.FC = () => {
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono font-bold text-slate-900 dark:text-white"
                 />
               </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <div>
                 <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
-                  {t('paid_by')}
+                  1. {t('paid_by_label', 'Paid by:')}
                 </label>
                 <select
                   value={paidByMemberId}
                   onChange={(e) => setPaidByMemberId(e.target.value)}
                   className="w-full px-2.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-900 dark:text-white"
                 >
-                  <option value="SHARED_POOL">{t('shared_pool_payer')}</option>
                   {members.map((m) => (
                     <option key={m.id} value={m.id}>
-                      {m.name}
+                      👤 {m.name}
                     </option>
                   ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                  2. {t('paid_from_label', 'Paid from:')}
+                </label>
+                <select
+                  value={paidFrom}
+                  onChange={(e) => setPaidFrom(e.target.value as 'FUND_POOL' | 'OUT_OF_POCKET')}
+                  className="w-full px-2.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-900 dark:text-white"
+                >
+                  <option value="FUND_POOL">
+                    {t('source_FUND_POOL', '🏦 Reimbursed from Fund Pool')}
+                  </option>
+                  <option value="OUT_OF_POCKET">
+                    {t('source_OUT_OF_POCKET', '👛 Out-of-Pocket (Not Reimbursed)')}
+                  </option>
                 </select>
               </div>
             </div>
@@ -410,8 +431,14 @@ export const CaregiverAndMedsScreen: React.FC = () => {
           {shifts.map((sh) => {
             const payerName =
               sh.paidByMemberId === 'SHARED_POOL'
-                ? t('shared_pool_payer')
+                ? t('unassigned_payer', 'Select Payer')
                 : memberMap.get(sh.paidByMemberId)?.name || '-';
+            const effectivePaidFrom =
+              sh.paidFrom || (sh.paidByMemberId === 'SHARED_POOL' ? 'FUND_POOL' : 'OUT_OF_POCKET');
+            const paidFromText =
+              effectivePaidFrom === 'FUND_POOL'
+                ? t('source_FUND_POOL', '🏦 Reimbursed from Fund Pool')
+                : t('source_OUT_OF_POCKET', '👛 Out-of-Pocket (Not Reimbursed)');
             const rt = sh.rateType || 'HOURLY';
             const unitStr = t(`unit_${rt}`, 'hr');
 
@@ -432,7 +459,15 @@ export const CaregiverAndMedsScreen: React.FC = () => {
                   </div>
                   <div className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
                     {sh.hours} {unitStr} × {currencySymbol}
-                    {sh.hourlyRate}/{unitStr} • {t('paid_by')} {payerName}
+                    {sh.hourlyRate}/{unitStr}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-600 dark:text-slate-400 mt-1">
+                    <span>
+                      <strong>{t('paid_by_label', 'Paid by:')}</strong> {payerName}
+                    </span>
+                    <span>
+                      <strong>{t('paid_from_label', 'Paid from:')}</strong> {paidFromText}
+                    </span>
                   </div>
                   {sh.vitalsOrNotes && (
                     <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">

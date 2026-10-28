@@ -345,6 +345,22 @@ export const FamilyHubScreen: React.FC<FamilyHubScreenProps> = ({ onOpenScanner 
                           {currencySymbol}
                           {b.assignedShare.toFixed(2)}
                         </div>
+                        {(b.directBillsPaid > 0 || b.reimbursedFromPool > 0) && (
+                          <div className="flex items-center gap-2 flex-wrap text-[10px] font-mono mt-1">
+                            {b.directBillsPaid > 0 && (
+                              <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 font-bold">
+                                👛 {t('pocket_unreimbursed_label', 'Out-of-Pocket')}: {currencySymbol}
+                                {b.directBillsPaid.toFixed(0)}
+                              </span>
+                            )}
+                            {b.reimbursedFromPool > 0 && (
+                              <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-bold">
+                                🏦 {t('pool_reimbursed_label', 'Reimbursed from Pool')}: {currencySymbol}
+                                {b.reimbursedFromPool.toFixed(0)}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -474,24 +490,78 @@ export const FamilyHubScreen: React.FC<FamilyHubScreenProps> = ({ onOpenScanner 
                         {exp.providerName}
                       </h4>
 
-                      {/* Interactive "Paid By / From" Selector */}
-                      <div className="flex items-center gap-1.5 mt-1.5 text-xs text-slate-600 dark:text-slate-300">
-                        <span>{t('paid_by')}</span>
-                        <select
-                          aria-label="Paid by source"
-                          value={exp.paidByMemberId}
-                          onChange={(e) =>
-                            updateExpense(exp.id, { paidByMemberId: e.target.value })
-                          }
-                          className="px-2 py-0.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-bold text-xs text-teal-700 dark:text-teal-300 cursor-pointer"
-                        >
-                          <option value="SHARED_POOL">{t('shared_pool_payer')}</option>
-                          {members.map((m) => (
-                            <option key={m.id} value={m.id}>
-                              {m.name}
+                      {/* 2 Clear Sections: 1. Paid By (Who paid first) & 2. Paid From (Fund Pool vs Out-of-Pocket) */}
+                      <div className="mt-2 space-y-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap text-xs text-slate-600 dark:text-slate-300">
+                          <span className="font-bold text-slate-500 dark:text-slate-400 min-w-[70px]">
+                            {t('paid_by_label', 'Paid by:')}
+                          </span>
+                          <select
+                            aria-label="Paid by member"
+                            value={
+                              members.some((m) => m.id === exp.paidByMemberId)
+                                ? exp.paidByMemberId
+                                : ''
+                            }
+                            onChange={(e) => {
+                              const nextMemberId = e.target.value;
+                              const currentPaidFrom =
+                                exp.paidFrom ||
+                                (exp.paidByMemberId === 'SHARED_POOL'
+                                  ? 'FUND_POOL'
+                                  : 'OUT_OF_POCKET');
+                              updateExpense(exp.id, {
+                                paidByMemberId: nextMemberId,
+                                paidFrom: currentPaidFrom,
+                              });
+                            }}
+                            className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-bold text-xs text-slate-900 dark:text-white cursor-pointer"
+                          >
+                            <option value="" disabled>
+                              {t('unassigned_payer', 'Select Payer...')}
                             </option>
-                          ))}
-                        </select>
+                            {members.map((m) => (
+                              <option key={m.id} value={m.id}>
+                                {m.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 flex-wrap text-xs text-slate-600 dark:text-slate-300">
+                          <span className="font-bold text-slate-500 dark:text-slate-400 min-w-[70px]">
+                            {t('paid_from_label', 'Paid from:')}
+                          </span>
+                          <select
+                            aria-label="Paid from source"
+                            value={
+                              exp.paidFrom ||
+                              (exp.paidByMemberId === 'SHARED_POOL'
+                                ? 'FUND_POOL'
+                                : 'OUT_OF_POCKET')
+                            }
+                            onChange={(e) =>
+                              updateExpense(exp.id, {
+                                paidFrom: e.target.value as 'FUND_POOL' | 'OUT_OF_POCKET',
+                              })
+                            }
+                            className={`px-2.5 py-1 rounded-lg border font-bold text-xs cursor-pointer ${
+                              (exp.paidFrom ||
+                                (exp.paidByMemberId === 'SHARED_POOL'
+                                  ? 'FUND_POOL'
+                                  : 'OUT_OF_POCKET')) === 'FUND_POOL'
+                                ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                                : 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300'
+                            }`}
+                          >
+                            <option value="FUND_POOL">
+                              {t('source_FUND_POOL', '🏦 Reimbursed from Fund Pool')}
+                            </option>
+                            <option value="OUT_OF_POCKET">
+                              {t('source_OUT_OF_POCKET', '👛 Out-of-Pocket (Not Reimbursed)')}
+                            </option>
+                          </select>
+                        </div>
                       </div>
                     </div>
 

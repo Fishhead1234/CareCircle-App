@@ -929,6 +929,7 @@ export const useCareStore = create<CareStoreState>((set, get) => {
           totalAmount: shift.totalPay,
           insuranceReimbursedAmount: 0,
           paidByMemberId: shift.paidByMemberId,
+          paidFrom: shift.paidFrom || 'FUND_POOL',
           insuranceClaimStatus: 'NOT_SUBMITTED',
           isTaxDeductible: true,
           notes: `${shift.hours} ${unitLabel} × ${cur}${shift.hourlyRate}/${unitLabel}. ${shift.vitalsOrNotes}`,
@@ -1015,9 +1016,14 @@ export const useCareStore = create<CareStoreState>((set, get) => {
       const { fundContributions, expenses, members } = get();
       const memberIds = new Set(members.map((m) => m.id));
 
+      const isOutOfPocketUnreimbursed = (e: MedicalExpense) => {
+        if (e.paidFrom) return e.paidFrom === 'OUT_OF_POCKET';
+        return memberIds.has(e.paidByMemberId);
+      };
+
       const totalDepositedIntoFund = fundContributions.reduce((s, fc) => s + fc.amount, 0);
       const directPocketBills = expenses
-        .filter((e) => memberIds.has(e.paidByMemberId))
+        .filter((e) => isOutOfPocketUnreimbursed(e) && memberIds.has(e.paidByMemberId))
         .reduce((s, e) => s + Math.max(0, e.totalAmount - (e.insuranceReimbursedAmount || 0)), 0);
 
       const totalFundsPutIn = totalDepositedIntoFund + directPocketBills;
@@ -1037,6 +1043,7 @@ export const useCareStore = create<CareStoreState>((set, get) => {
 
     getMemberBalances: () => {
       const { members, fundContributions, expenses, settlements } = get();
+      const memberIds = new Set(members.map((m) => m.id));
       const totalSplitWeight =
         members.reduce((acc, m) => acc + (m.splitPercentage || 0), 0) || 100;
 
@@ -1045,7 +1052,12 @@ export const useCareStore = create<CareStoreState>((set, get) => {
         0
       );
 
-      // Compute each member's total put in (fund deposits + direct pocket bills)
+      const isOutOfPocketUnreimbursed = (e: MedicalExpense) => {
+        if (e.paidFrom) return e.paidFrom === 'OUT_OF_POCKET';
+        return memberIds.has(e.paidByMemberId);
+      };
+
+      // Compute each member's total put in (fund deposits + unreimbursed out-of-pocket bills)
       const rawContribs = members.map((member) => {
         const fundDeposited = fundContributions
           .filter((fc) => fc.memberId === member.id)
@@ -1057,7 +1069,14 @@ export const useCareStore = create<CareStoreState>((set, get) => {
           (s, e) => s + (e.insuranceReimbursedAmount || 0),
           0
         );
-        const directBillsPaid = Math.max(0, grossPaid - insuranceReimbursed);
+
+        const directBillsPaid = memberExpenses
+          .filter((e) => isOutOfPocketUnreimbursed(e))
+          .reduce((s, e) => s + Math.max(0, e.totalAmount - (e.insuranceReimbursedAmount || 0)), 0);
+
+        const reimbursedFromPool = memberExpenses
+          .filter((e) => !isOutOfPocketUnreimbursed(e))
+          .reduce((s, e) => s + Math.max(0, e.totalAmount - (e.insuranceReimbursedAmount || 0)), 0);
 
         const settlementsPaidOut = settlements
           .filter((s) => s.fromMemberId === member.id)
@@ -1074,6 +1093,7 @@ export const useCareStore = create<CareStoreState>((set, get) => {
           member,
           fundDeposited,
           directBillsPaid,
+          reimbursedFromPool,
           grossPaid,
           insuranceReimbursed,
           settlementsPaidOut,
@@ -1100,6 +1120,7 @@ export const useCareStore = create<CareStoreState>((set, get) => {
           member: r.member,
           fundDeposited: r.fundDeposited,
           directBillsPaid: r.directBillsPaid,
+          reimbursedFromPool: r.reimbursedFromPool,
           totalContributed: r.totalContributed,
           actualContributionPercent,
           grossPaid: r.grossPaid,

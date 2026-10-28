@@ -38,7 +38,8 @@ export const ReceiptScannerModal: React.FC<ReceiptScannerModalProps> = ({ isOpen
   const [category, setCategory] = useState<ExpenseCategory>('HOSPITAL_CLINIC');
   const [totalAmount, setTotalAmount] = useState<string>('');
   const [insuranceReimbursedAmount, setInsuranceReimbursedAmount] = useState<string>('0');
-  const [paidByMemberId, setPaidByMemberId] = useState<string>('SHARED_POOL');
+  const [paidByMemberId, setPaidByMemberId] = useState<string>(members[0]?.id || 'mem_sarah');
+  const [paidFrom, setPaidFrom] = useState<'FUND_POOL' | 'OUT_OF_POCKET'>('FUND_POOL');
   const [isTaxDeductible, setIsTaxDeductible] = useState(true);
   const [lineItems, setLineItems] = useState<ReceiptLineItem[]>([]);
 
@@ -133,6 +134,7 @@ export const ReceiptScannerModal: React.FC<ReceiptScannerModalProps> = ({ isOpen
       totalAmount: numericTotal,
       insuranceReimbursedAmount: parseFloat(insuranceReimbursedAmount) || 0,
       paidByMemberId: paidByMemberId || members[0]?.id || 'mem_sarah',
+      paidFrom,
       insuranceClaimStatus:
         parseFloat(insuranceReimbursedAmount) > 0 ? 'REIMBURSED' : 'NOT_SUBMITTED',
       isTaxDeductible,
@@ -228,55 +230,82 @@ export const ReceiptScannerModal: React.FC<ReceiptScannerModalProps> = ({ isOpen
             )}
           </div>
 
-          {/* 2. Who Paid? (Shared Fund Pool or Individual Payer) */}
-          <div>
-            <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1.5">
-              {t('field_who_paid')}
-            </label>
-            <button
-              type="button"
-              onClick={() => setPaidByMemberId('SHARED_POOL')}
-              className={`w-full mb-2 p-2.5 rounded-xl border text-left transition cursor-pointer flex items-center justify-between ${
-                paidByMemberId === 'SHARED_POOL'
-                  ? 'border-emerald-600 bg-emerald-500/10 ring-2 ring-emerald-500/20'
-                  : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50'
-              }`}
-            >
-              <span className="text-xs font-extrabold text-slate-900 dark:text-white">
-                {t('shared_pool_payer')}
-              </span>
-              {paidByMemberId === 'SHARED_POOL' && (
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-              )}
-            </button>
-            <div className="grid grid-cols-3 gap-2">
-              {members.map((m) => {
-                const selected = paidByMemberId === m.id;
-                return (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => setPaidByMemberId(m.id)}
-                    className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
-                      selected
-                        ? 'border-teal-600 bg-teal-500/10 ring-2 ring-teal-500/20'
-                        : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50'
-                    }`}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <span
-                        className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0"
-                        style={{ backgroundColor: m.avatarColor }}
-                      >
-                        {m.name.slice(0, 1)}
-                      </span>
-                      <span className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                        {m.name}
-                      </span>
-                    </div>
-                  </button>
-                );
-              })}
+          {/* 2. Separate Paid By & Paid From Sections */}
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1.5">
+                {t('field_who_paid', '1. Paid By (Who paid first?)')}
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {members.map((m) => {
+                  const selected = paidByMemberId === m.id;
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setPaidByMemberId(m.id)}
+                      className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
+                        selected
+                          ? 'border-teal-600 bg-teal-500/10 ring-2 ring-teal-500/20'
+                          : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0"
+                          style={{ backgroundColor: m.avatarColor }}
+                        >
+                          {m.name.slice(0, 1)}
+                        </span>
+                        <span className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                          {m.name}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1.5">
+                {t('field_paid_from', '2. Paid From (Reimbursed from Funding Pool?)')}
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPaidFrom('FUND_POOL')}
+                  className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex items-center justify-between ${
+                    paidFrom === 'FUND_POOL'
+                      ? 'border-emerald-600 bg-emerald-500/10 ring-2 ring-emerald-500/20'
+                      : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50'
+                  }`}
+                >
+                  <span className="text-xs font-bold text-slate-900 dark:text-white">
+                    {t('source_FUND_POOL', '🏦 Reimbursed from Fund Pool')}
+                  </span>
+                  {paidFrom === 'FUND_POOL' && (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPaidFrom('OUT_OF_POCKET')}
+                  className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex items-center justify-between ${
+                    paidFrom === 'OUT_OF_POCKET'
+                      ? 'border-amber-600 bg-amber-500/10 ring-2 ring-amber-500/20'
+                      : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50'
+                  }`}
+                >
+                  <span className="text-xs font-bold text-slate-900 dark:text-white">
+                    {t('source_OUT_OF_POCKET', '👛 Out-of-Pocket (Not Reimbursed)')}
+                  </span>
+                  {paidFrom === 'OUT_OF_POCKET' && (
+                    <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0" />
+                  )}
+                </button>
+              </div>
             </div>
           </div>
 

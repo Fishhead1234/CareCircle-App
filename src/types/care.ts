@@ -23,6 +23,8 @@ export interface ReceiptLineItem {
   isTaxDeductible: boolean;
 }
 
+export type ExpensePaidFrom = 'FUND_POOL' | 'OUT_OF_POCKET';
+
 export interface MedicalExpense {
   id: string;
   providerName: string;
@@ -30,8 +32,10 @@ export interface MedicalExpense {
   category: ExpenseCategory;
   totalAmount: number;
   insuranceReimbursedAmount: number;
-  /** Either a member.id (paid out-of-pocket by that member) or 'SHARED_POOL' (paid from the Family Fund Pool) */
+  /** Which family member paid/fronted the bill first (member.id) */
   paidByMemberId: string;
+  /** Whether this bill was paid/reimbursed from the Family Fund Pool ('FUND_POOL') or is still unreimbursed out-of-pocket ('OUT_OF_POCKET') */
+  paidFrom?: ExpensePaidFrom;
   lineItems: ReceiptLineItem[];
   insuranceClaimStatus: InsuranceClaimStatus;
   isTaxDeductible: boolean;
@@ -84,6 +88,7 @@ export interface CaregiverShift {
   hourlyRate: number;
   totalPay: number;
   paidByMemberId: string;
+  paidFrom?: ExpensePaidFrom;
   tasksCompleted: string[];
   vitalsOrNotes: string;
   linkedExpenseId?: string;
@@ -122,8 +127,10 @@ export interface MemberBalanceSummary {
   member: FamilyMember;
   /** Cash deposited directly into the Family Fund Pool */
   fundDeposited: number;
-  /** Net bills paid directly out of this member's pocket (when paidByMemberId === member.id) */
+  /** Net bills paid by this member that are STILL unreimbursed out-of-pocket (paidFrom === 'OUT_OF_POCKET') */
   directBillsPaid: number;
+  /** Net bills paid first by this member that WERE reimbursed from the Fund Pool (paidFrom === 'FUND_POOL') */
+  reimbursedFromPool: number;
   /** Total put in by this member = fundDeposited + directBillsPaid */
   totalContributed: number;
   /** Actual % of total family contributions paid by this member (0 - 100) */

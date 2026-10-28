@@ -43,8 +43,14 @@ export const pdfReportService = {
       .map((exp) => {
         const payer =
           exp.paidByMemberId === 'SHARED_POOL'
-            ? tr('shared_pool_payer', 'Family Fund Pool')
+            ? '-'
             : memberMap.get(exp.paidByMemberId) || '-';
+        const effectivePaidFrom =
+          exp.paidFrom || (exp.paidByMemberId === 'SHARED_POOL' ? 'FUND_POOL' : 'OUT_OF_POCKET');
+        const paidFromLabel =
+          effectivePaidFrom === 'FUND_POOL'
+            ? tr('source_FUND_POOL', 'Reimbursed from Fund Pool')
+            : tr('source_OUT_OF_POCKET', 'Out-of-Pocket (Not Reimbursed)');
         const net = Math.max(0, exp.totalAmount - (exp.insuranceReimbursedAmount || 0));
         const catLabel = tr(`cat_${exp.category}`, exp.category);
         const lineItemsHtml = exp.lineItems
@@ -62,7 +68,10 @@ export const pdfReportService = {
               <div style="font-size:11px;color:#0d9488;font-weight:600;">${catLabel}</div>
               ${lineItemsHtml}
             </td>
-            <td style="padding:8px;border-bottom:1px solid #e2e8f0;font-size:12px;">${payer}</td>
+            <td style="padding:8px;border-bottom:1px solid #e2e8f0;font-size:12px;">
+              <div style="font-weight:600;">${payer}</div>
+              <div style="font-size:11px;color:#64748b;">${paidFromLabel}</div>
+            </td>
             <td style="padding:8px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:monospace;font-size:12px;">${currency}${exp.totalAmount.toFixed(2)}</td>
             <td style="padding:8px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:monospace;font-size:12px;color:#059669;">${currency}${(exp.insuranceReimbursedAmount || 0).toFixed(2)}</td>
             <td style="padding:8px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:monospace;font-weight:700;font-size:12px;">${currency}${net.toFixed(2)}</td>

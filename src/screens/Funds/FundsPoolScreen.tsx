@@ -306,17 +306,33 @@ export const FundsPoolScreen: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between pt-2 border-t border-slate-200/60 dark:border-slate-700/60 text-xs font-mono text-slate-600 dark:text-slate-300">
-                  <div>
-                    {t('contributed_prefix')}:{' '}
-                    <strong>
-                      {currencySymbol}
-                      {b.totalContributed.toFixed(2)}
-                    </strong>{' '}
-                    <span className="text-[11px] text-slate-400">
-                      ({t('fair_share_prefix')}: {currencySymbol}
-                      {b.assignedShare.toFixed(2)})
-                    </span>
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200/60 dark:border-slate-700/60 text-xs font-mono text-slate-600 dark:text-slate-300">
+                  <div className="space-y-1">
+                    <div>
+                      {t('contributed_prefix')}:{' '}
+                      <strong>
+                        {currencySymbol}
+                        {b.totalContributed.toFixed(2)}
+                      </strong>{' '}
+                      <span className="text-[11px] text-slate-400">
+                        ({t('fair_share_prefix')}: {currencySymbol}
+                        {b.assignedShare.toFixed(2)})
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[10px]">
+                      {b.directBillsPaid > 0 && (
+                        <span className="text-amber-700 dark:text-amber-300 font-bold">
+                          👛 {t('pocket_unreimbursed_label', 'Out-of-Pocket')}: {currencySymbol}
+                          {b.directBillsPaid.toFixed(0)}
+                        </span>
+                      )}
+                      {b.reimbursedFromPool > 0 && (
+                        <span className="text-emerald-700 dark:text-emerald-300 font-semibold">
+                          🏦 {t('pool_reimbursed_label', 'Reimbursed from Pool')}: {currencySymbol}
+                          {b.reimbursedFromPool.toFixed(0)}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {needsToPay && (
