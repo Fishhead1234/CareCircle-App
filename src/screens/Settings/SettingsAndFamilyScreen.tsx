@@ -12,12 +12,16 @@ import {
   CheckCircle2,
   RefreshCw,
   Globe,
+  Coins,
   KeyRound,
   Lock,
 } from 'lucide-react';
 import { useCareStore } from '../../store/careStore';
 import { pdfReportService } from '../../services/pdfReportService';
-import { SUPPORTED_LANGUAGES } from '../../i18n/translations';
+import {
+  SUPPORTED_LANGUAGES,
+  SUPPORTED_CURRENCIES,
+} from '../../i18n/translations';
 
 const AVATAR_COLORS = ['#0D9488', '#2563EB', '#7C3AED', '#EA580C', '#DB2777', '#059669'];
 
@@ -27,7 +31,9 @@ export const SettingsAndFamilyScreen: React.FC = () => {
     members,
     expenses,
     shifts,
+    currencyCode,
     currencySymbol,
+    setCurrency,
     language,
     setLanguage,
     geminiApiKey,
@@ -199,34 +205,65 @@ export const SettingsAndFamilyScreen: React.FC = () => {
         </div>
       </div>
 
-      {/* 2. Language Selector Card */}
-      <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4 shadow-sm">
-        <h3 className="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-1.5 mb-3">
-          <Globe className="w-4 h-4 text-teal-600" />
-          <span>語言設定 / Language</span>
-        </h3>
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-          {SUPPORTED_LANGUAGES.map((langOpt) => {
-            const active = language === langOpt.code;
-            return (
-              <button
-                key={langOpt.code}
-                onClick={() => setLanguage(langOpt.code)}
-                className={`flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl border text-xs font-bold transition cursor-pointer ${
-                  active
-                    ? 'border-teal-600 bg-teal-600 text-white shadow-sm'
-                    : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
-                }`}
-              >
-                <span>{langOpt.flag}</span>
-                <span>{langOpt.label}</span>
-              </button>
-            );
-          })}
+      {/* 2. Language & Major Currencies Card */}
+      <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4 shadow-sm space-y-4">
+        {/* Language */}
+        <div>
+          <h3 className="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-1.5 mb-2.5">
+            <Globe className="w-4 h-4 text-teal-600" />
+            <span>語言設定 / Language</span>
+          </h3>
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+            {SUPPORTED_LANGUAGES.map((langOpt) => {
+              const active = language === langOpt.code;
+              return (
+                <button
+                  key={langOpt.code}
+                  onClick={() => setLanguage(langOpt.code)}
+                  className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold transition cursor-pointer ${
+                    active
+                      ? 'border-teal-600 bg-teal-600 text-white shadow-sm'
+                      : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                  }`}
+                >
+                  <span>{langOpt.flag}</span>
+                  <span>{langOpt.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Major Currencies */}
+        <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
+          <h3 className="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-1.5 mb-2.5">
+            <Coins className="w-4 h-4 text-amber-500" />
+            <span>{t('currency_card_title')}</span>
+          </h3>
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+            {SUPPORTED_CURRENCIES.map((cur) => {
+              const active = currencyCode === cur.code;
+              return (
+                <button
+                  key={cur.code}
+                  onClick={() => setCurrency(cur.code)}
+                  className={`flex items-center justify-center gap-1 px-2.5 py-2 rounded-xl border text-xs font-bold transition cursor-pointer ${
+                    active
+                      ? 'border-amber-500 bg-amber-500 text-slate-950 shadow-sm'
+                      : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                  }`}
+                >
+                  <span>{cur.flag}</span>
+                  <span>{cur.code}</span>
+                  <span className="opacity-75 font-mono">({cur.symbol})</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
-      {/* 3. Family Members & Split % */}
+      {/* 3. Family Members / Payers & Split % (Directly Editable Names & Roles!) */}
       <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4 shadow-sm">
         <div className="flex items-center justify-between gap-2 mb-3">
           <div>
@@ -246,28 +283,39 @@ export const SettingsAndFamilyScreen: React.FC = () => {
           </button>
         </div>
 
-        <div className="space-y-2 mb-3">
+        <div className="space-y-2.5 mb-3">
           {members.map((m) => (
             <div
               key={m.id}
-              className="p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between gap-2"
+              className="p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/60 flex flex-wrap sm:flex-nowrap items-center gap-2"
             >
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div
-                  className="w-8 h-8 rounded-xl flex items-center justify-center text-white font-black text-xs shrink-0"
-                  style={{ backgroundColor: m.avatarColor }}
-                >
-                  {m.name.slice(0, 2)}
-                </div>
-                <div className="min-w-0">
-                  <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                    {m.name}
-                  </div>
-                  <div className="text-[10px] text-slate-500 truncate">{m.relationship}</div>
-                </div>
+              <div
+                className="w-8 h-8 rounded-xl flex items-center justify-center text-white font-black text-xs shrink-0"
+                style={{ backgroundColor: m.avatarColor }}
+              >
+                {m.name.slice(0, 2)}
               </div>
 
-              <div className="flex items-center gap-1.5 shrink-0">
+              {/* Editable Payer Name */}
+              <input
+                type="text"
+                value={m.name}
+                onChange={(e) => updateFamilyMember(m.id, { name: e.target.value })}
+                placeholder="Name"
+                className="flex-1 min-w-[110px] px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-900 dark:text-white"
+              />
+
+              {/* Editable Relationship / Role */}
+              <input
+                type="text"
+                value={m.relationship}
+                onChange={(e) => updateFamilyMember(m.id, { relationship: e.target.value })}
+                placeholder="Role"
+                className="w-28 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-600 dark:text-slate-300"
+              />
+
+              {/* Editable Split % */}
+              <div className="flex items-center gap-1 shrink-0">
                 <input
                   type="number"
                   min={0}
@@ -278,7 +326,7 @@ export const SettingsAndFamilyScreen: React.FC = () => {
                       splitPercentage: Math.max(0, Math.min(100, Number(e.target.value) || 0)),
                     })
                   }
-                  className="w-14 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono font-bold text-center text-slate-900 dark:text-white"
+                  className="w-14 px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono font-bold text-center text-slate-900 dark:text-white"
                 />
                 <span className="text-xs font-bold text-slate-500">%</span>
                 {members.length > 1 && (
@@ -286,7 +334,7 @@ export const SettingsAndFamilyScreen: React.FC = () => {
                     onClick={() => removeFamilyMember(m.id)}
                     className="p-1 text-slate-400 hover:text-rose-500 cursor-pointer"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
+                    <Trash2 className="w-4 h-4" />
                   </button>
                 )}
               </div>
@@ -439,7 +487,7 @@ export const SettingsAndFamilyScreen: React.FC = () => {
           onClick={handleVersionTap}
           className="text-[11px] text-slate-400 select-none cursor-pointer"
         >
-          CareCircle v1.1.0 • {isAdmin ? 'Admin Pro Unlocked' : 'Family Hub'}
+          CareCircle v1.1.1 • {isAdmin ? 'Admin Pro Unlocked' : 'Family Hub'}
         </button>
 
         {showAdminPrompt && (

@@ -6,12 +6,34 @@ export interface LanguageOption {
   flag: string;
 }
 
+export interface CurrencyOption {
+  code: string;
+  symbol: string;
+  label: string;
+  flag: string;
+}
+
 export const SUPPORTED_LANGUAGES: LanguageOption[] = [
   { code: 'zh-TW', label: '繁體中文', flag: '🇹🇼' },
   { code: 'en', label: 'English', flag: '🇺🇸' },
   { code: 'zh-CN', label: '简体中文', flag: '🇨🇳' },
   { code: 'ja', label: '日本語', flag: '🇯🇵' },
   { code: 'ko', label: '한국어', flag: '🇰🇷' },
+];
+
+export const SUPPORTED_CURRENCIES: CurrencyOption[] = [
+  { code: 'TWD', symbol: 'NT$', label: 'TWD (NT$ 台幣)', flag: '🇹🇼' },
+  { code: 'HKD', symbol: 'HK$', label: 'HKD (HK$ 港幣)', flag: '🇭🇰' },
+  { code: 'USD', symbol: '$', label: 'USD ($ 美金)', flag: '🇺🇸' },
+  { code: 'AUD', symbol: 'A$', label: 'AUD (A$ 澳幣)', flag: '🇦🇺' },
+  { code: 'SGD', symbol: 'S$', label: 'SGD (S$ 新幣)', flag: '🇸🇬' },
+  { code: 'GBP', symbol: '£', label: 'GBP (£ 英鎊)', flag: '🇬🇧' },
+  { code: 'EUR', symbol: '€', label: 'EUR (€ 歐元)', flag: '🇪🇺' },
+  { code: 'CAD', symbol: 'CA$', label: 'CAD (CA$ 加幣)', flag: '🇨🇦' },
+  { code: 'JPY', symbol: '¥', label: 'JPY (¥ 日圓)', flag: '🇯🇵' },
+  { code: 'CNY', symbol: '¥', label: 'CNY (¥ 人民幣)', flag: '🇨🇳' },
+  { code: 'MYR', symbol: 'RM', label: 'MYR (RM 馬幣)', flag: '🇲🇾' },
+  { code: 'KRW', symbol: '₩', label: 'KRW (₩ 韓元)', flag: '🇰🇷' },
 ];
 
 export const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
@@ -23,23 +45,26 @@ export const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
     tab_settings: 'PDF與家庭',
 
     // Hero & Snap
-    caring_for: '照護對象',
+    caring_for: '照護對象（點此可改名）',
     snap_bill_btn: '拍照 / 新增收據',
-    total_shared_cost: '家庭共同負擔總額',
-    gross_billed: '醫療總支出',
+    total_shared_cost: '家庭共同分攤總支出（實付總額）',
+    total_shared_cost_hint: '＝ 所有醫療收據總額 − 保險理賠退費（需由家人按比例分攤的總支出）',
+    gross_billed: '帳單總支出',
     insurance_refund: '保險已理賠',
     net_out_of_pocket: '實付分攤金額',
 
     // Family Split & Balances
     who_paid_what: '誰先墊付 & 分攤結算',
-    paid_prefix: '已墊付',
-    fair_share_prefix: '應分攤',
+    edit_members_btn: '✏️ 編輯付款人姓名 / 比例',
+    done_editing_btn: '✓ 完成編輯',
+    paid_prefix: '已先墊付',
+    fair_share_prefix: '應分攤支出',
     share_suffix: '分攤',
     status_settled: '已結清',
-    status_owed: '應收退款',
-    status_owes: '應補繳',
+    status_owed: '應收回款（多墊）',
+    status_owes: '應補繳（少墊）',
     settle_up_title: '建議結算轉帳（一鍵平帳）',
-    pays_arrow: '支付給',
+    pays_arrow: '轉帳給',
     mark_paid_btn: '標記已轉帳',
     settled_toast: '已記錄轉帳結清！',
 
@@ -54,7 +79,7 @@ export const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
 
     // Bills List
     bills_section_title: '醫療收據與支出紀錄',
-    paid_by: '墊付人：',
+    paid_by: '墊付付款人：',
     tax_deductible_badge: '可報稅/保險',
     items_count: '項明細',
     delete_btn: '刪除',
@@ -112,10 +137,11 @@ export const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
     generate_pdf_btn: '🖨️ 一鍵產生 PDF 醫療報銷明細表',
     export_csv_btn: '📊 匯出 Excel / CSV 記帳表',
 
-    family_card_title: '家庭成員與分攤比例',
-    family_card_desc: '設定每位家人的分攤百分比（總和 100%）',
+    currency_card_title: '幣別設定 / Currency',
+    family_card_title: '家庭成員 / 付款人姓名與分攤比例',
+    family_card_desc: '直接點擊下方文字即可修改「付款人姓名」、「稱謂」與「分攤百分比 %」',
     equal_split_btn: '平均分攤',
-    add_member_placeholder: '新增家人姓名（例如：小弟）',
+    add_member_placeholder: '新增家人/付款人姓名（例如：小弟）',
     add_role_placeholder: '稱謂（例如：弟弟）',
     add_member_btn: '新增',
 
@@ -141,18 +167,21 @@ export const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
 
     caring_for: 'Caring For',
     snap_bill_btn: 'Snap / Add Bill',
-    total_shared_cost: 'Net Shared Family Total',
+    total_shared_cost: 'Total Family Out-of-Pocket Expense',
+    total_shared_cost_hint: '= Total Medical Bills minus Insurance Refunds (Total expense to split among family)',
     gross_billed: 'Total Billed',
     insurance_refund: 'Insurance Refund',
     net_out_of_pocket: 'Net Out-of-Pocket',
 
     who_paid_what: 'Who Paid What & Pool Balance',
+    edit_members_btn: '✏️ Edit Payer Names / Split %',
+    done_editing_btn: '✓ Done Editing',
     paid_prefix: 'Paid',
-    fair_share_prefix: 'Share',
+    fair_share_prefix: 'Fair Share',
     share_suffix: 'split',
     status_settled: 'Settled',
     status_owed: 'Owed back',
-    status_owes: 'Owes pool',
+    status_owes: 'Owes family',
     settle_up_title: 'Suggested Transfers to Settle Up',
     pays_arrow: 'pays',
     mark_paid_btn: 'Mark Paid',
@@ -222,10 +251,11 @@ export const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
     generate_pdf_btn: '🖨️ 1-Click Generate PDF Summary',
     export_csv_btn: '📊 Export CSV Spreadsheet',
 
-    family_card_title: 'Family Members & Split %',
-    family_card_desc: 'Set how expenses are shared among family members (totals 100%)',
+    currency_card_title: 'Currency',
+    family_card_title: 'Family Payers & Split % (Edit Names Here)',
+    family_card_desc: 'Tap any name, role, or percentage below to edit who pays and how expenses are split (totals 100%)',
     equal_split_btn: 'Equal Split',
-    add_member_placeholder: 'New Member Name',
+    add_member_placeholder: 'New Payer / Family Member Name',
     add_role_placeholder: 'Role (e.g. Brother)',
     add_member_btn: 'Add',
 
@@ -251,12 +281,15 @@ export const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
 
     caring_for: '照护对象',
     snap_bill_btn: '拍照 / 添加收据',
-    total_shared_cost: '家庭共同分摊总额',
+    total_shared_cost: '家庭共同分摊总支出（实付总额）',
+    total_shared_cost_hint: '＝ 所有医疗账单总额 − 医保/保险报销（需由家人按比例分摊的总支出）',
     gross_billed: '医疗总支出',
     insurance_refund: '医保/保险报销',
     net_out_of_pocket: '实付分摊金额',
 
     who_paid_what: '谁先垫付 & 分摊结算',
+    edit_members_btn: '✏️ 编辑付款人姓名 / 比例',
+    done_editing_btn: '✓ 完成编辑',
     paid_prefix: '已垫付',
     fair_share_prefix: '应分摊',
     share_suffix: '分摊',
@@ -332,8 +365,9 @@ export const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
     generate_pdf_btn: '🖨️ 一键生成 PDF 医疗报销明细表',
     export_csv_btn: '📊 导出 Excel / CSV 记账表',
 
-    family_card_title: '家庭成员与分摊比例',
-    family_card_desc: '设置每位家人的分摊百分比（总和 100%）',
+    currency_card_title: '币种设置 / Currency',
+    family_card_title: '家庭成员 / 付款人姓名与分摊比例',
+    family_card_desc: '直接点击下方输入框即可修改付款人姓名、称谓与分摊比例（总和 100%）',
     equal_split_btn: '平均分摊',
     add_member_placeholder: '新增家人姓名',
     add_role_placeholder: '称谓（如：弟弟）',
@@ -361,12 +395,15 @@ export const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
 
     caring_for: 'ケア対象者',
     snap_bill_btn: '領収書を撮影/追加',
-    total_shared_cost: '家族分担の純合計',
+    total_shared_cost: '家族分担の実質医療費合計（自己負担総額）',
+    total_shared_cost_hint: '＝ 医療費総額 − 保険還付金（家族全員で分担する実質支出額）',
     gross_billed: '医療費総額',
     insurance_refund: '保険還付金',
     net_out_of_pocket: '実質自己負担',
 
     who_paid_what: '立替額と家族間の精算バランス',
+    edit_members_btn: '✏️ 名前・分担率を編集',
+    done_editing_btn: '✓ 編集完了',
     paid_prefix: '立替済',
     fair_share_prefix: '負担枠',
     share_suffix: '分担',
@@ -442,8 +479,9 @@ export const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
     generate_pdf_btn: '🖨️ PDF明細レポートを作成・印刷',
     export_csv_btn: '📊 CSVデータ出力',
 
-    family_card_title: '家族メンバーと分担割合',
-    family_card_desc: '家族それぞれの負担割合（合計100%）を設定',
+    currency_card_title: '通貨設定 / Currency',
+    family_card_title: '家族メンバーと分担割合（名前の編集）',
+    family_card_desc: '名前・続柄・負担割合（合計100%）を直接タップして編集できます',
     equal_split_btn: '均等割り',
     add_member_placeholder: 'メンバー名',
     add_role_placeholder: '続柄（例：弟）',
@@ -471,12 +509,15 @@ export const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
 
     caring_for: '돌봄 대상 어르신',
     snap_bill_btn: '영수증 촬영 / 추가',
-    total_shared_cost: '가족 공동 분담 총액',
+    total_shared_cost: '가족 공동 분담 총 지출액 (실제 부담 총액)',
+    total_shared_cost_hint: '= 총 의료비 지출 − 보험 환급금 (가족이 함께 나누어 부담할 총 비용)',
     gross_billed: '총 의료비 지출',
     insurance_refund: '실손/보험 환급금',
     net_out_of_pocket: '실제 가족 부담금',
 
     who_paid_what: '누가 결제했나 & 가족 정산 잔액',
+    edit_members_btn: '✏️ 이름 / 분담 비율 수정',
+    done_editing_btn: '✓ 수정 완료',
     paid_prefix: '결제액',
     fair_share_prefix: '분담액',
     share_suffix: '분담',
@@ -552,8 +593,9 @@ export const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
     generate_pdf_btn: '🖨️ 원클릭 PDF 정산서 생성 및 인쇄',
     export_csv_btn: '📊 엑셀 / CSV 내보내기',
 
-    family_card_title: '가족 구성원 및 분담 비율',
-    family_card_desc: '가족별 의료비 분담 비율(합계 100%)을 설정하세요',
+    currency_card_title: '통화 설정 / Currency',
+    family_card_title: '가족 구성원 이름 수정 및 분담 비율',
+    family_card_desc: '아래 입력칸을 눌러 결제자 이름, 호칭, 분담 비율(합계 100%)을 바로 수정하세요',
     equal_split_btn: '균등 분담',
     add_member_placeholder: '가족 이름 추가',
     add_role_placeholder: '관계 (예: 동생)',

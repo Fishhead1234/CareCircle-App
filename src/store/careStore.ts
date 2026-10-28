@@ -9,7 +9,7 @@ import {
   MemberBalanceSummary,
   SuggestedSettlement,
 } from '../types/care';
-import { AppLanguage, TRANSLATIONS } from '../i18n/translations';
+import { AppLanguage, TRANSLATIONS, SUPPORTED_CURRENCIES } from '../i18n/translations';
 
 export type AppTab = 'hub' | 'carelog' | 'settings';
 
@@ -19,6 +19,7 @@ interface CareStoreState {
   activeTab: AppTab;
   language: AppLanguage;
   themeMode: 'light' | 'dark';
+  currencyCode: string;
   currencySymbol: string;
   geminiApiKey: string;
   isPro: boolean;
@@ -32,9 +33,10 @@ interface CareStoreState {
   shifts: CaregiverShift[];
   medications: MedicationSchedule[];
 
-  // Navigation, i18n & UI
+  // Navigation, i18n, Currency & UI
   setActiveTab: (tab: AppTab) => void;
   setLanguage: (lang: AppLanguage) => void;
+  setCurrency: (code: string) => void;
   t: (key: string, fallback?: string) => string;
   toggleTheme: () => void;
   setGeminiApiKey: (key: string) => void;
@@ -623,6 +625,7 @@ export const useCareStore = create<CareStoreState>((set, get) => {
         JSON.stringify({
           language: s.language,
           themeMode: s.themeMode,
+          currencyCode: s.currencyCode,
           currencySymbol: s.currencySymbol,
           geminiApiKey: s.geminiApiKey,
           isPro: s.isPro,
@@ -645,6 +648,7 @@ export const useCareStore = create<CareStoreState>((set, get) => {
     activeTab: 'hub',
     language: initialLang,
     themeMode: saved?.themeMode || 'light',
+    currencyCode: saved?.currencyCode || 'USD',
     currencySymbol: saved?.currencySymbol || '$',
     geminiApiKey: saved?.geminiApiKey || '',
     isPro: saved?.isPro ?? true,
@@ -659,6 +663,14 @@ export const useCareStore = create<CareStoreState>((set, get) => {
     medications: saved?.medications || initialDemo.medications,
 
     setActiveTab: (tab) => set({ activeTab: tab }),
+
+    setCurrency: (code) => {
+      const found = SUPPORTED_CURRENCIES.find((c) => c.code === code);
+      if (found) {
+        set({ currencyCode: found.code, currencySymbol: found.symbol });
+        persist();
+      }
+    },
 
     setLanguage: (lang) => {
       const current = get();

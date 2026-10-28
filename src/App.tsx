@@ -8,13 +8,18 @@ import {
   Moon,
   HeartHandshake,
   Globe,
+  Coins,
 } from 'lucide-react';
 import { useCareStore, AppTab } from './store/careStore';
 import { FamilyHubScreen } from './screens/Hub/FamilyHubScreen';
 import { CaregiverAndMedsScreen } from './screens/CareLog/CaregiverAndMedsScreen';
 import { SettingsAndFamilyScreen } from './screens/Settings/SettingsAndFamilyScreen';
 import { ReceiptScannerModal } from './screens/Scanner/ReceiptScannerModal';
-import { SUPPORTED_LANGUAGES, AppLanguage } from './i18n/translations';
+import {
+  SUPPORTED_LANGUAGES,
+  SUPPORTED_CURRENCIES,
+  AppLanguage,
+} from './i18n/translations';
 
 export const App: React.FC = () => {
   const {
@@ -24,6 +29,8 @@ export const App: React.FC = () => {
     toggleTheme,
     language,
     setLanguage,
+    currencyCode,
+    setCurrency,
     t,
   } = useCareStore();
   const [isScannerOpen, setIsScannerOpen] = useState(false);
@@ -57,9 +64,9 @@ export const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col">
-      {/* Sticky Top Header with Instant Language Switcher */}
+      {/* Sticky Top Header with Instant Language & Currency Switchers */}
       <header className="sticky top-0 z-30 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800">
-        <div className="max-w-xl mx-auto px-4 h-14 flex items-center justify-between gap-2">
+        <div className="max-w-xl mx-auto px-3.5 h-14 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center text-white shadow-sm shrink-0">
               <HeartHandshake className="w-5 h-5" />
@@ -68,13 +75,34 @@ export const App: React.FC = () => {
               <span className="font-black text-sm tracking-tight text-slate-900 dark:text-white block truncate">
                 {t('app_title')}
               </span>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate hidden sm:block">
                 {t('app_subtitle')}
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
+            {/* Currency Dropdown Pill */}
+            <div className="relative flex items-center bg-slate-100 dark:bg-slate-800 rounded-xl px-2 py-1.5 border border-slate-200 dark:border-slate-700">
+              <Coins className="w-3.5 h-3.5 text-amber-500 mr-1 shrink-0" />
+              <select
+                aria-label="Currency"
+                value={currencyCode}
+                onChange={(e) => setCurrency(e.target.value)}
+                className="bg-transparent text-xs font-extrabold text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer"
+              >
+                {SUPPORTED_CURRENCIES.map((c) => (
+                  <option
+                    key={c.code}
+                    value={c.code}
+                    className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                  >
+                    {c.flag} {c.code} ({c.symbol})
+                  </option>
+                ))}
+              </select>
+            </div>
+
             {/* Language Dropdown Pill */}
             <div className="relative flex items-center bg-slate-100 dark:bg-slate-800 rounded-xl px-2 py-1.5 border border-slate-200 dark:border-slate-700">
               <Globe className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 mr-1 shrink-0" />
@@ -82,7 +110,7 @@ export const App: React.FC = () => {
                 aria-label="Language"
                 value={language}
                 onChange={(e) => setLanguage(e.target.value as AppLanguage)}
-                className="bg-transparent text-xs font-extrabold text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer pr-1"
+                className="bg-transparent text-xs font-extrabold text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer"
               >
                 {SUPPORTED_LANGUAGES.map((l) => (
                   <option
@@ -95,14 +123,6 @@ export const App: React.FC = () => {
                 ))}
               </select>
             </div>
-
-            <button
-              onClick={() => setIsScannerOpen(true)}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-extrabold text-xs shadow-sm active:scale-95 transition cursor-pointer"
-            >
-              <Camera className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">{t('snap_bill_btn')}</span>
-            </button>
 
             <button
               onClick={toggleTheme}
