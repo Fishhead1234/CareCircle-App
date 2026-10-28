@@ -43,6 +43,23 @@ export const App: React.FC = () => {
     t,
   } = useCareStore();
   const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [deferredInstallPrompt, setDeferredInstallPrompt] = useState<any>(null);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      e.preventDefault();
+      setDeferredInstallPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  const handleInstallPwa = async () => {
+    if (!deferredInstallPrompt) return;
+    deferredInstallPrompt.prompt();
+    await deferredInstallPrompt.userChoice;
+    setDeferredInstallPrompt(null);
+  };
 
   useEffect(() => {
     const root = document.documentElement;
@@ -131,22 +148,31 @@ export const App: React.FC = () => {
     <div className="min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col">
       {/* Sticky Top Header with Instant Language & Currency Switchers */}
       <header className="sticky top-0 z-30 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800">
-        <div className="max-w-xl mx-auto px-3.5 h-14 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center text-white shadow-sm shrink-0">
-              <HeartHandshake className="w-5 h-5" />
+        <div className="max-w-xl mx-auto px-3 h-14 flex items-center justify-between gap-1.5">
+          <div className="flex items-center gap-2 min-w-0 shrink-0">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-2xl bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center text-white shadow-sm shrink-0">
+              <HeartHandshake className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
-            <div className="min-w-0">
+            <div className="hidden sm:block min-w-0">
               <span className="font-black text-sm tracking-tight text-slate-900 dark:text-white block truncate">
                 {t('app_title')}
               </span>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate hidden sm:block">
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
                 {t('app_subtitle')}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+            {deferredInstallPrompt && (
+              <button
+                type="button"
+                onClick={handleInstallPwa}
+                className="px-2 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-[11px] font-extrabold cursor-pointer shadow-sm shrink-0"
+              >
+                📲 {language === 'zh-TW' ? '安裝 App' : 'Install'}
+              </button>
+            )}
             {/* Live Cloud Room Status Pill */}
             <button
               type="button"
