@@ -7,6 +7,9 @@ export interface ExtractedReceiptResult {
   date: string;
   category: ExpenseCategory;
   totalAmount: number;
+  insuranceReimbursedAmount?: number;
+  copaymentAmount?: number;
+  selfPaidAmount?: number;
   isTaxDeductible: boolean;
   aiConfidence: number;
   notes: string;
@@ -615,13 +618,22 @@ export function parseReceiptTextWithHeuristics(
     category = 'MEDICAL_SUPPLIES';
   }
 
-  // 4. Total Amount Extraction
+  // 4. Total Amount & Insurance Extraction
   let totalAmount = 0;
+  let insuranceReimbursedAmount = 0;
   const totalKeywords = [
     '實收金額', '應收金額', '實付', '應付', '合計', '總計', '總額', '總金額', '自費金額', '收費金額', '繳費金額',
     '金額', '結帳', '現金', '刷卡',
     'Amount Received', 'Patient\'s payable Amount', 'Total', 'Grand Total', 'Amount Due', 'Amount Paid', 'Net Amount', 'Balance Due'
   ];
+
+  const insMatch = cleanText.match(/(?:健保申報|健保給付|健保金額|健保點數|保險金額)[\s:：點]*([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)/);
+  if (insMatch) {
+    const parsedIns = parseFloat(insMatch[1].replace(/,/g, ''));
+    if (parsedIns > 0) {
+      insuranceReimbursedAmount = parsedIns;
+    }
+  }
 
   // Pass 1: Look for lines explicitly mentioning total keywords
   for (let i = 0; i < lines.length; i++) {
@@ -745,6 +757,7 @@ export function parseReceiptTextWithHeuristics(
     date: extractedDate,
     category,
     totalAmount,
+    insuranceReimbursedAmount: insuranceReimbursedAmount > 0 ? insuranceReimbursedAmount : undefined,
     isTaxDeductible: true,
     aiConfidence,
     notes,
@@ -790,10 +803,15 @@ export const aiReceiptService = {
 
           const prompt = `You are an expert medical receipt, hospital bill, and clinic invoice reader. ${langInstruction}
 Analyze this medical/hospital receipt image very carefully.
-Receipts often contain complex tabular charts with columns like:
-[項目 Item | 健保金額 Insurance Amount | 自費金額 Self-paid Amount | ...]
-and summary boxes like:
-[住院部分負擔金額 Copayment, 自費金額 Self-paid, 應收金額 Patient's payable, 實收金額 Amount Received].
+Receipts often contain complex tabular charts with columns:
+- 項目 Item
+- 健保金額 Insurance Covered Amount (paid by health insurance)
+- 自費金額 Self-paid Amount (paid by patient)
+And summary boxes:
+- 健保申報 / 健保給付 (Total Insurance Covered Amount, e.g. 29,350 點)
+- 住院部分負擔金額 Copayment (e.g. 2,935)
+- 自費金額 / 其他自費金額 Other self-paid (e.g. 1,970, which is 伙食費 1870 + 特殊材料費 100)
+- 實收金額 / 應收金額 (Total Amount Paid by Patient, e.g. 4,905 = 2935 + 1870 + 100).
 
 Extract the receipt details and return ONLY a valid JSON object matching this exact structure:
 {
@@ -803,6 +821,7 @@ Extract the receipt details and return ONLY a valid JSON object matching this ex
   "date": "YYYY-MM-DD",
   "category": "HOSPITAL_CLINIC" | "PHARMACY_MEDS" | "IN_HOME_CAREGIVER" | "MEDICAL_SUPPLIES" | "THERAPY_REHAB" | "LAB_DIAGNOSTICS",
   "totalAmount": number,
+  "insuranceReimbursedAmount": number,
   "copaymentAmount": number,
   "selfPaidAmount": number,
   "isTaxDeductible": boolean,
@@ -811,7 +830,7 @@ Extract the receipt details and return ONLY a valid JSON object matching this ex
   "lineItems": [
     {
       "id": "li_1",
-      "description": "Item description with code and bilingual text if present (e.g. 01. 診察費 (DIAGNOSE FEE))",
+      "description": "Item description with code and bilingual text (e.g. 25. 住院部份負擔 (Copayment))",
       "quantity": number,
       "unitPrice": number,
       "total": number,
@@ -821,19 +840,25 @@ Extract the receipt details and return ONLY a valid JSON object matching this ex
   ]
 }
 
-CRITICAL RULES FOR TABULAR RECEIPTS:
-1. Provider Name: Extract the official hospital, clinic, or pharmacy name from the top header or official circular seal/stamp (e.g. 三軍總醫院, 台大醫院, 台北榮總). NEVER use the serial invoice/receipt number (like No.115...) as providerName!
-2. Date: Convert Taiwan ROC year (民國紀年) to Gregorian year (西元年). For example:
-   - 115/10/26 -> 2026-10-26 (115 + 1911 = 2026)
-   - 113/10/26 -> 2024-10-26
-   Prefer the bill date (開單日期 / 費用起訖日期).
-3. Total Amount:
-   - Must be the actual final amount paid or payable by the patient: 實收金額 (Amount Received) or 應收金額 (Patient Payable Amount).
-   - In Taiwan hospital receipts with 住院部分負擔 (Copayment) and 自費 (Self-paid), totalAmount is the sum (實收金額, e.g. 4,905). Do NOT confuse totalAmount with copayment alone!
-4. Line Items:
-   - ONLY include items where the cost is strictly GREATER than 0!
-   - EXCLUDE all table rows where both 健保金額 and 自費金額 are 0 (e.g. 手術費 0, 麻醉費 0, 血液費 0 must NOT be in lineItems).
-   - For items with non-zero amounts, use the non-zero amount as total (e.g. 01. 診察費 4173, 03. 伙食費 1870, 04. 檢查費 12695, 12. 特殊材料費 100, 13. 藥費 580, 14. 藥事服務費 912).
+CRITICAL RULES FOR PATIENT OUT-OF-POCKET EXPENSES VS INSURANCE:
+1. Patient Payable Amount (totalAmount):
+   - The actual net amount paid by the patient at the cashier: 實收金額 / 應收金額 (e.g. 4,905).
+   - In Taiwan hospital receipts, this equals: 住院部分負擔 (Copayment, e.g. 2,935) + 其他自費金額 (Self-paid, e.g. 1,970).
+
+2. Insurance Covered Amount (insuranceReimbursedAmount):
+   - Extract the total amount covered or claimed by National Health Insurance (健保申報 / 健保給付點數/金額, e.g. 29,350).
+   - Always put this number into "insuranceReimbursedAmount": 29350!
+
+3. Patient Payment Breakdown (lineItems):
+   - The lineItems list MUST represent the patient's actual payment breakdown (the sum of which equals totalAmount $4,905):
+     1. Include "25. 住院部份負擔 (Copayment)" with its exact amount (e.g. 2,935, isInsuranceEligible: true).
+     2. Include each non-zero 自費 (Self-paid) item (e.g. "03. 伙食費 (DIET FEE)": 1870, "12. 特殊材料費 (SPECIAL MEDICAL SUPPLIES FEE)": 100).
+   - Verify the sum: 2935 (copayment) + 1870 (diet) + 100 (special supplies) = 4,905!
+   - Do NOT put 健保-paid items (診察費 4173, 病房費 10990, 檢查費 12695) into patient-paid lineItems because those were covered by 健保 (part of the 29,350), NOT paid by the patient!
+
+4. Provider Name & Date:
+   - Provider Name: Extract official hospital, clinic, or pharmacy name from top header or stamp. Never use the receipt serial number!
+   - Date: Convert Taiwan ROC year (民國紀年) to Gregorian year (西元年), e.g. 115/10/26 -> 2026-10-26.
 `;
 
           const requestBody = JSON.stringify({
@@ -898,6 +923,9 @@ CRITICAL RULES FOR TABULAR RECEIPTS:
                       date: parsed.date || new Date().toISOString().split('T')[0],
                       category: parsed.category || 'HOSPITAL_CLINIC',
                       totalAmount: finalTotal,
+                      insuranceReimbursedAmount: Number(parsed.insuranceReimbursedAmount) || 0,
+                      copaymentAmount: Number(parsed.copaymentAmount) || 0,
+                      selfPaidAmount: Number(parsed.selfPaidAmount) || 0,
                       isTaxDeductible: Boolean(parsed.isTaxDeductible ?? true),
                       aiConfidence: Number(parsed.aiConfidence) || 99,
                       notes: parsed.notes || '',

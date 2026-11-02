@@ -67,6 +67,7 @@ export const ReceiptScannerModal: React.FC<ReceiptScannerModalProps> = ({ isOpen
     date: string;
     category: ExpenseCategory;
     totalAmount: number;
+    insuranceReimbursedAmount?: number;
     isTaxDeductible: boolean;
     lineItems: ReceiptLineItem[];
   }) => {
@@ -74,6 +75,9 @@ export const ReceiptScannerModal: React.FC<ReceiptScannerModalProps> = ({ isOpen
     if (res.date) setDate(res.date);
     if (res.category) setCategory(res.category);
     if (res.totalAmount > 0) setTotalAmount(res.totalAmount.toFixed(2));
+    if (res.insuranceReimbursedAmount !== undefined && res.insuranceReimbursedAmount > 0) {
+      setInsuranceReimbursedAmount(res.insuranceReimbursedAmount.toFixed(2));
+    }
     setIsTaxDeductible(res.isTaxDeductible);
     if (res.lineItems && res.lineItems.length > 0) {
       setLineItems(res.lineItems);
