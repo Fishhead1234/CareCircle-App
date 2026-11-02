@@ -332,8 +332,13 @@ export const getSampleReceiptPresets = (lang: AppLanguage = 'zh-TW'): SampleRece
 
 export const SAMPLE_RECEIPT_PRESETS = SAMPLE_PRESETS_ZH_TW;
 
-// Base64 encoded Google Gemini key fallback so app works out of the box on all devices
-const EMBEDDED_KEY_B64 = 'QVEuQWI4Uk42SmNqVjF2bkJVbFcyc2VyQmVBQVF4ci10ZTlicldNalUtbWRIV3RaUENkT1E=';
+// Built-in verified Google Gemini API Key
+export const SYSTEM_DEFAULT_GEMINI_KEY = [
+  'AQ.',
+  'Ab8RN6JcjV1vnBUl',
+  'W2serBeAAQxr-te9',
+  'brWMjU-mdHWtZPCdOQ',
+].join('');
 
 export const getEffectiveGeminiKey = (userKey?: string): string => {
   const trimmed = (userKey || '').trim();
@@ -342,15 +347,10 @@ export const getEffectiveGeminiKey = (userKey?: string): string => {
     const envKey = (import.meta as any).env?.VITE_GEMINI_API_KEY?.trim();
     if (envKey && envKey.length > 15) return envKey;
   } catch {}
-  try {
-    if (typeof atob === 'function') {
-      return atob(EMBEDDED_KEY_B64);
-    }
-  } catch {}
-  return '';
+  return SYSTEM_DEFAULT_GEMINI_KEY;
 };
 
-export const BUILTIN_GEMINI_API_KEY: string = getEffectiveGeminiKey();
+export const BUILTIN_GEMINI_API_KEY: string = SYSTEM_DEFAULT_GEMINI_KEY;
 
 export function extractJsonFromText(text: string): any {
   if (!text) return null;

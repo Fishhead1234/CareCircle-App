@@ -44,7 +44,7 @@ export const ReceiptScannerModal: React.FC<ReceiptScannerModalProps> = ({ isOpen
 
   // Quick API Key Popover
   const [showKeyPopover, setShowKeyPopover] = useState(false);
-  const [keyInput, setKeyInput] = useState(geminiApiKey || '');
+  const [keyInput, setKeyInput] = useState(getEffectiveGeminiKey(geminiApiKey));
 
   const [providerName, setProviderName] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);

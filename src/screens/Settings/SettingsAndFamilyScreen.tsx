@@ -74,7 +74,7 @@ export const SettingsAndFamilyScreen: React.FC = () => {
   const [pdfTaxOnly, setPdfTaxOnly] = useState(false);
 
   // Gemini API Key management
-  const [geminiKeyInput, setGeminiKeyInput] = useState(geminiApiKey || '');
+  const [geminiKeyInput, setGeminiKeyInput] = useState(getEffectiveGeminiKey(geminiApiKey));
   const [showGeminiKey, setShowGeminiKey] = useState(false);
   const [isTestingKey, setIsTestingKey] = useState(false);
   const [keyTestResult, setKeyTestResult] = useState<{ success: boolean; msg: string } | null>(null);
