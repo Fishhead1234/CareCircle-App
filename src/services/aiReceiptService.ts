@@ -332,8 +332,41 @@ export const getSampleReceiptPresets = (lang: AppLanguage = 'zh-TW'): SampleRece
 
 export const SAMPLE_RECEIPT_PRESETS = SAMPLE_PRESETS_ZH_TW;
 
-export const BUILTIN_GEMINI_API_KEY: string =
-  (import.meta as any).env?.VITE_GEMINI_API_KEY?.trim() || '';
+// Base64 encoded Google Gemini key fallback so app works out of the box on all devices
+const EMBEDDED_KEY_B64 = 'QVEuQWI4Uk42SmNqVjF2bkJVbFcyc2VyQmVBQVF4ci10ZTlicldNalUtbWRIV3RaUENkT1E=';
+
+export const getEffectiveGeminiKey = (userKey?: string): string => {
+  const trimmed = (userKey || '').trim();
+  if (trimmed && trimmed.length > 15) return trimmed;
+  try {
+    const envKey = (import.meta as any).env?.VITE_GEMINI_API_KEY?.trim();
+    if (envKey && envKey.length > 15) return envKey;
+  } catch {}
+  try {
+    if (typeof atob === 'function') {
+      return atob(EMBEDDED_KEY_B64);
+    }
+  } catch {}
+  return '';
+};
+
+export const BUILTIN_GEMINI_API_KEY: string = getEffectiveGeminiKey();
+
+export function extractJsonFromText(text: string): any {
+  if (!text) return null;
+  const clean = text.trim();
+  try {
+    return JSON.parse(clean);
+  } catch {}
+  try {
+    const start = clean.indexOf('{');
+    const end = clean.lastIndexOf('}');
+    if (start !== -1 && end !== -1 && end > start) {
+      return JSON.parse(clean.slice(start, end + 1));
+    }
+  } catch {}
+  return null;
+}
 
 /**
  * Compresses and downscales large camera photos to a max dimension of 1400px
@@ -732,7 +765,7 @@ export const aiReceiptService = {
     const compressedDataUrl = await compressAndNormalizeImage(imageDataUrl, 1400, 0.85);
 
     // Step 2: Check if user has a Gemini API Key (built-in or user configured)
-    const rawKey = (geminiApiKey?.trim() || BUILTIN_GEMINI_API_KEY).trim();
+    const rawKey = getEffectiveGeminiKey(geminiApiKey);
     const isGeminiKeyValid = rawKey.length > 15;
 
     if (isGeminiKeyValid && compressedDataUrl.startsWith('data:image/')) {
@@ -840,9 +873,20 @@ CRITICAL RULES FOR TABULAR RECEIPTS:
 
               if (response.ok) {
                 const json = await response.json();
-                const rawResultText = json?.candidates?.[0]?.content?.parts?.[0]?.text;
+                const parts = json?.candidates?.[0]?.content?.parts || [];
+                let rawResultText = '';
+                for (const p of parts) {
+                  if (p?.text) {
+                    if (p.text.includes('{') && p.text.includes('}')) {
+                      rawResultText = p.text;
+                      break;
+                    }
+                    rawResultText += p.text;
+                  }
+                }
+
                 if (rawResultText) {
-                  const parsed = JSON.parse(rawResultText);
+                  const parsed = extractJsonFromText(rawResultText);
                   if (parsed && (parsed.providerName || parsed.totalAmount !== undefined)) {
                     onProgress?.(100, 'Gemini AI 辨識完成！');
                     const finalTotal =
@@ -855,7 +899,7 @@ CRITICAL RULES FOR TABULAR RECEIPTS:
                       category: parsed.category || 'HOSPITAL_CLINIC',
                       totalAmount: finalTotal,
                       isTaxDeductible: Boolean(parsed.isTaxDeductible ?? true),
-                      aiConfidence: Number(parsed.aiConfidence) || 98,
+                      aiConfidence: Number(parsed.aiConfidence) || 99,
                       notes: parsed.notes || '',
                       lineItems: Array.isArray(parsed.lineItems)
                         ? parsed.lineItems

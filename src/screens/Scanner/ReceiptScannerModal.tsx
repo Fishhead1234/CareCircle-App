@@ -21,7 +21,7 @@ import {
   ReceiptLineItem,
   EXPENSE_CATEGORY_META,
 } from '../../types/care';
-import { aiReceiptService } from '../../services/aiReceiptService';
+import { aiReceiptService, getEffectiveGeminiKey } from '../../services/aiReceiptService';
 
 interface ReceiptScannerModalProps {
   isOpen: boolean;
@@ -59,7 +59,8 @@ export const ReceiptScannerModal: React.FC<ReceiptScannerModalProps> = ({ isOpen
   if (!isOpen) return null;
 
   const isZh = language !== 'en';
-  const hasValidGeminiKey = geminiApiKey.length > 15;
+  const effectiveGeminiKey = getEffectiveGeminiKey(geminiApiKey);
+  const hasValidGeminiKey = effectiveGeminiKey.length > 15;
 
   const applyExtractedResult = (res: {
     providerName: string;
@@ -91,7 +92,7 @@ export const ReceiptScannerModal: React.FC<ReceiptScannerModalProps> = ({ isOpen
       const extracted = await aiReceiptService.analyzeReceiptImage(
         dataUrl,
         fileName,
-        geminiApiKey,
+        effectiveGeminiKey,
         language,
         (pct, status) => {
           setScanProgressPercent(pct);

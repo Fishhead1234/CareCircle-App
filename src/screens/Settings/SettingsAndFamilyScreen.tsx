@@ -26,6 +26,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { useCareStore } from '../../store/careStore';
+import { getEffectiveGeminiKey } from '../../services/aiReceiptService';
 import { pdfReportService } from '../../services/pdfReportService';
 import { SUPABASE_SQL_SCHEMA } from '../../services/supabaseSyncService';
 import {
@@ -754,13 +755,13 @@ export const SettingsAndFamilyScreen: React.FC = () => {
         <div className="flex items-center gap-2">
           <span
             className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${
-              geminiApiKey.length > 15
+              getEffectiveGeminiKey(geminiApiKey).length > 15
                 ? 'bg-purple-500/15 text-purple-700 dark:text-purple-300'
                 : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
             }`}
           >
             <Sparkles className="w-3.5 h-3.5" />
-            {geminiApiKey.length > 15
+            {getEffectiveGeminiKey(geminiApiKey).length > 15
               ? (language === 'zh-TW' ? '✨ Gemini 雲端 AI 模式 (已啟用)' : '✨ Gemini Cloud AI Enabled')
               : (language === 'zh-TW' ? '⚡ 本地 OCR 離線模式 (預設啟用，免金鑰)' : '⚡ Local OCR Offline Mode (Active)')}
           </span>
