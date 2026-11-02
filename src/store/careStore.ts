@@ -142,6 +142,18 @@ export const getEffectiveGeminiKey = (savedKey?: string): string => {
 
 const DEFAULT_GEMINI_KEY: string = SYSTEM_DEFAULT_GEMINI_KEY;
 
+export const sanitizeExpenses = (expenses: MedicalExpense[]): MedicalExpense[] => {
+  if (!Array.isArray(expenses)) return [];
+  return expenses.map((exp) => {
+    // If an expense has insuranceReimbursedAmount >= totalAmount (e.g. NHI covered points 29,350 being stored as refund against a 4,905 bill),
+    // it was erroneously stored as a refund. Reset it to 0 so the user's actual expense is restored.
+    if (exp.insuranceReimbursedAmount && exp.insuranceReimbursedAmount >= exp.totalAmount) {
+      return { ...exp, insuranceReimbursedAmount: 0 };
+    }
+    return exp;
+  });
+};
+
 const DEMO_DATA_ZH_TW = {
   recipient: {
     name: '陳林淑芬 (媽媽)',
@@ -830,7 +842,7 @@ export const useCareStore = create<CareStoreState>((set, get) => {
       : saved
       ? []
       : initialDemo.fundContributions,
-    expenses: Array.isArray(saved?.expenses) ? saved.expenses : initialDemo.expenses,
+    expenses: Array.isArray(saved?.expenses) ? sanitizeExpenses(saved.expenses) : initialDemo.expenses,
     settlements: Array.isArray(saved?.settlements) ? saved.settlements : [],
     shifts: Array.isArray(saved?.shifts) ? saved.shifts : initialDemo.shifts,
     medications: Array.isArray(saved?.medications) ? saved.medications : initialDemo.medications,
@@ -956,7 +968,11 @@ export const useCareStore = create<CareStoreState>((set, get) => {
 
     addExpense: (expense) => {
       const id = `exp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-      const newExpense: MedicalExpense = { ...expense, id };
+      let safeRefund = expense.insuranceReimbursedAmount || 0;
+      if (safeRefund >= expense.totalAmount) {
+        safeRefund = 0;
+      }
+      const newExpense: MedicalExpense = { ...expense, id, insuranceReimbursedAmount: safeRefund };
       set((state) => ({
         expenses: [newExpense, ...state.expenses],
       }));
@@ -966,7 +982,14 @@ export const useCareStore = create<CareStoreState>((set, get) => {
 
     updateExpense: (id, updates) => {
       set((state) => ({
-        expenses: state.expenses.map((e) => (e.id === id ? { ...e, ...updates } : e)),
+        expenses: state.expenses.map((e) => {
+          if (e.id !== id) return e;
+          const merged = { ...e, ...updates };
+          if (merged.insuranceReimbursedAmount && merged.insuranceReimbursedAmount >= merged.totalAmount) {
+            merged.insuranceReimbursedAmount = 0;
+          }
+          return merged;
+        }),
       }));
       persist();
     },
@@ -1392,7 +1415,7 @@ export const useCareStore = create<CareStoreState>((set, get) => {
           s.fundContributions,
           Array.isArray(cloud.fundContributions) ? cloud.fundContributions : []
         );
-        nextExpenses = mergeList(s.expenses, Array.isArray(cloud.expenses) ? cloud.expenses : []);
+        nextExpenses = sanitizeExpenses(mergeList(s.expenses, Array.isArray(cloud.expenses) ? cloud.expenses : []));
         nextSettlements = mergeList(
           s.settlements,
           Array.isArray(cloud.settlements) ? cloud.settlements : []
@@ -1494,10 +1517,11 @@ export const useCareStore = create<CareStoreState>((set, get) => {
         return;
       }
 
-      const nextExpenses =
+      const nextExpenses = sanitizeExpenses(
         localIsDemo && !cloudIsDemo
           ? (Array.isArray(cloud.expenses) ? cloud.expenses : [])
-          : mergeCloudFirst(s.expenses, Array.isArray(cloud.expenses) ? cloud.expenses : []);
+          : mergeCloudFirst(s.expenses, Array.isArray(cloud.expenses) ? cloud.expenses : [])
+      );
 
       const nextFunds =
         localIsDemo && !cloudIsDemo

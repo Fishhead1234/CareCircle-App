@@ -75,8 +75,14 @@ export const ReceiptScannerModal: React.FC<ReceiptScannerModalProps> = ({ isOpen
     if (res.date) setDate(res.date);
     if (res.category) setCategory(res.category);
     if (res.totalAmount > 0) setTotalAmount(res.totalAmount.toFixed(2));
-    if (res.insuranceReimbursedAmount !== undefined && res.insuranceReimbursedAmount > 0) {
+    if (
+      res.insuranceReimbursedAmount !== undefined &&
+      res.insuranceReimbursedAmount > 0 &&
+      res.insuranceReimbursedAmount < res.totalAmount
+    ) {
       setInsuranceReimbursedAmount(res.insuranceReimbursedAmount.toFixed(2));
+    } else {
+      setInsuranceReimbursedAmount('0');
     }
     setIsTaxDeductible(res.isTaxDeductible);
     if (res.lineItems && res.lineItems.length > 0) {
@@ -243,16 +249,19 @@ export const ReceiptScannerModal: React.FC<ReceiptScannerModalProps> = ({ isOpen
       lineItems.reduce((sum, li) => sum + (Number(li.total) || 0), 0);
     if (!providerName.trim() || numericTotal <= 0) return;
 
+    const parsedRefund = parseFloat(insuranceReimbursedAmount) || 0;
+    const safeRefund = parsedRefund < numericTotal ? parsedRefund : 0;
+
     addExpense({
       providerName: providerName.trim(),
       date,
       category,
       totalAmount: numericTotal,
-      insuranceReimbursedAmount: parseFloat(insuranceReimbursedAmount) || 0,
+      insuranceReimbursedAmount: safeRefund,
       paidByMemberId: paidByMemberId || members[0]?.id || 'mem_sarah',
       paidFrom,
       insuranceClaimStatus:
-        parseFloat(insuranceReimbursedAmount) > 0 ? 'REIMBURSED' : 'NOT_SUBMITTED',
+        safeRefund > 0 ? 'REIMBURSED' : 'NOT_SUBMITTED',
       isTaxDeductible,
       receiptImageDataUrl: receiptPreview || undefined,
       lineItems: lineItems.filter((li) => li.description.trim() !== ''),
@@ -645,6 +654,11 @@ export const ReceiptScannerModal: React.FC<ReceiptScannerModalProps> = ({ isOpen
                   placeholder="0.00"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-base font-mono font-bold text-emerald-600 dark:text-emerald-400"
                 />
+                <span className="block text-[10px] text-slate-400 dark:text-slate-500 mt-1">
+                  {isZh
+                    ? '💡 僅填寫家庭已收到之商業保險理賠或長照補助款（會自總金額扣除）。收據上的「健保給付」非退款，請填 0。'
+                    : '💡 Enter actual insurance claim payouts/subsidies received. Do not enter NHI coverage points.'}
+                </span>
               </div>
             </div>
           </div>

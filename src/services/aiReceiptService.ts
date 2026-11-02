@@ -625,20 +625,14 @@ export function parseReceiptTextWithHeuristics(
 
   // 4. Total Amount & Insurance Extraction
   let totalAmount = 0;
-  let insuranceReimbursedAmount = 0;
+  // Note: On hospital/clinic bills, 健保申報 (NHI points) is NOT a patient refund.
+  // insuranceReimbursedAmount represents actual cash reimbursements from private insurance, so default to 0.
+  const insuranceReimbursedAmount = 0;
   const totalKeywords = [
     '實收金額', '應收金額', '實付', '應付', '合計', '總計', '總額', '總金額', '自費金額', '收費金額', '繳費金額',
     '金額', '結帳', '現金', '刷卡',
     'Amount Received', 'Patient\'s payable Amount', 'Total', 'Grand Total', 'Amount Due', 'Amount Paid', 'Net Amount', 'Balance Due'
   ];
-
-  const insMatch = cleanText.match(/(?:健保申報|健保給付|健保金額|健保點數|保險金額)[\s:：點]*([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)/);
-  if (insMatch) {
-    const parsedIns = parseFloat(insMatch[1].replace(/,/g, ''));
-    if (parsedIns > 0) {
-      insuranceReimbursedAmount = parsedIns;
-    }
-  }
 
   // Pass 1: Look for lines explicitly mentioning total keywords
   for (let i = 0; i < lines.length; i++) {
@@ -853,9 +847,11 @@ CRITICAL RULES FOR PATIENT OUT-OF-POCKET EXPENSES VS INSURANCE:
    - The actual net amount paid by the patient at the cashier: 實收金額 / 應收金額 (e.g. 4,905).
    - In Taiwan hospital receipts, this equals: 住院部分負擔 (Copayment, e.g. 2,935) + 其他自費金額 (Self-paid, e.g. 1,970).
 
-2. Insurance Covered Amount (insuranceReimbursedAmount):
-   - Extract the total amount covered or claimed by National Health Insurance (健保申報 / 健保給付點數/金額, e.g. 29,350).
-   - Always put this number into "insuranceReimbursedAmount": 29350!
+2. Private Insurance Refund (insuranceReimbursedAmount):
+   - ALWAYS return 0 for hospital and clinic receipts!
+   - DO NOT put National Health Insurance declared points (健保申報 / 健保給付點數, e.g. 29,350) into "insuranceReimbursedAmount"!
+   - National Health Insurance is settled directly between the hospital and the government; it is NOT a cash refund or reimbursement to the patient. Putting 29,350 here causes the family accounting system to deduct $29,350 from the patient's payment, wrongly reducing the actual expense to $0!
+   - You may mention the NHI declaration in "notes" (e.g. "健保給付 29,350 點，病患實付 4,905 元"), but keep "insuranceReimbursedAmount": 0!
 
 3. Patient Payment Breakdown (lineItems):
    - The lineItems list MUST represent the patient's actual payment breakdown (the sum of which equals totalAmount $4,905):
@@ -937,7 +933,10 @@ CRITICAL RULES FOR PATIENT OUT-OF-POCKET EXPENSES VS INSURANCE:
                       date: parsed.date || new Date().toISOString().split('T')[0],
                       category: parsed.category || 'HOSPITAL_CLINIC',
                       totalAmount: finalTotal,
-                      insuranceReimbursedAmount: Number(parsed.insuranceReimbursedAmount) || 0,
+                      insuranceReimbursedAmount:
+                        (Number(parsed.insuranceReimbursedAmount) || 0) < finalTotal
+                          ? (Number(parsed.insuranceReimbursedAmount) || 0)
+                          : 0,
                       copaymentAmount: Number(parsed.copaymentAmount) || 0,
                       selfPaidAmount: Number(parsed.selfPaidAmount) || 0,
                       isTaxDeductible: Boolean(parsed.isTaxDeductible ?? true),

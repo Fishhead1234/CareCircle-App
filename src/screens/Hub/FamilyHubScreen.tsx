@@ -26,6 +26,7 @@ export const FamilyHubScreen: React.FC<FamilyHubScreenProps> = ({ onOpenScanner 
     expenses,
     currencySymbol,
     formatAmount,
+    language,
     setActiveTab,
     updateRecipient,
     updateFamilyMember,
@@ -578,9 +579,19 @@ export const FamilyHubScreen: React.FC<FamilyHubScreenProps> = ({ onOpenScanner 
                         {formatAmount(netCost)}
                       </div>
                       {exp.insuranceReimbursedAmount > 0 && (
-                        <div className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400">
-                          -{currencySymbol}
-                          {formatAmount(exp.insuranceReimbursedAmount)}
+                        <div className="flex items-center justify-end gap-1 text-[10px] font-mono text-emerald-600 dark:text-emerald-400">
+                          <span>
+                            -{currencySymbol}
+                            {formatAmount(exp.insuranceReimbursedAmount)}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => updateExpense(exp.id, { insuranceReimbursedAmount: 0 })}
+                            title={language !== 'en' ? '清除退費扣抵' : 'Clear refund deduction'}
+                            className="text-slate-400 hover:text-rose-500 text-[10px] underline ml-1 cursor-pointer"
+                          >
+                            {language !== 'en' ? '清除' : 'Clear'}
+                          </button>
                         </div>
                       )}
                       <button
