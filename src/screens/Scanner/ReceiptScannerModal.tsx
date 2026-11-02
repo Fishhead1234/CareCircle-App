@@ -107,10 +107,15 @@ export const ReceiptScannerModal: React.FC<ReceiptScannerModalProps> = ({ isOpen
       if (extracted.totalAmount > 0 || extracted.providerName.trim() !== '') {
         applyExtractedResult(extracted);
         if (extracted.aiConfidence > 0) {
+          const isGemini = extracted.recognitionSource === 'GEMINI';
           setScanSuccessBanner(
             isZh
-              ? `✅ 成功辨識！院所：${extracted.providerName || '已辨識'}，金額：$${extracted.totalAmount} (信心度 ${extracted.aiConfidence}%)`
-              : `✅ Successfully extracted! ${extracted.providerName}, Total: $${extracted.totalAmount} (${extracted.aiConfidence}% match)`
+              ? isGemini
+                ? `✨ Gemini AI 辨識完成！院所：${extracted.providerName || '已辨識'}，金額：$${extracted.totalAmount} (信心度 ${extracted.aiConfidence}%)`
+                : `ℹ️ 本地離線文字辨識完成：院所：${extracted.providerName || '已辨識'}，金額：$${extracted.totalAmount}。請核對明細。`
+              : isGemini
+              ? `✨ Gemini AI Extracted! ${extracted.providerName}, Total: $${extracted.totalAmount} (${extracted.aiConfidence}% match)`
+              : `ℹ️ Local OCR: ${extracted.providerName}, Total: $${extracted.totalAmount}. Please verify details.`
           );
         }
       } else {

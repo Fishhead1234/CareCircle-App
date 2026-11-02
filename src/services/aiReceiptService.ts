@@ -14,6 +14,8 @@ export interface ExtractedReceiptResult {
   aiConfidence: number;
   notes: string;
   lineItems: ReceiptLineItem[];
+  recognitionSource?: 'GEMINI' | 'LOCAL_OCR' | 'MANUAL';
+  failureReason?: string;
 }
 
 export interface SampleReceiptPreset {
@@ -553,8 +555,11 @@ export function parseReceiptTextWithHeuristics(
   if (!providerName) {
     for (const line of lines.slice(0, 4)) {
       const stripped = line.replace(/^[#\*\-=\s]+/, '').trim();
+      // If Chinese language, require at least 2 Chinese characters so English OCR noise like "foe BS" is never used
+      const hasChinese = isZh ? (stripped.match(/[\u4e00-\u9fa5]/g)?.length || 0) >= 2 : true;
       if (
         stripped.length >= 2 &&
+        hasChinese &&
         !stripped.match(/^(?:202|11[0-9]|09[0-9]|\(?0[2-8]\)?|收據|發票|收執聯|統一編號|No\.|NO\.)/i) &&
         !stripped.match(/^[0-9\W]+$/)
       ) {
@@ -684,8 +689,14 @@ export function parseReceiptTextWithHeuristics(
     if (match) {
       const desc = match[1].replace(/[^\w\u4e00-\u9fa5\s()（）]/g, '').trim();
       const amount = parseFloat(match[2].replace(/,/g, ''));
+      
+      // When Chinese receipt, reject garbage noise fragments without Chinese characters
+      const isLegitItem = isZh
+        ? (desc.match(/[\u4e00-\u9fa5]/g)?.length || 0) >= 2
+        : desc.length >= 3 && !desc.match(/^(?:WARE|emer|sar|fe|Era|IL|nt)/i);
+
       if (
-        desc.length >= 2 &&
+        isLegitItem &&
         amount > 0 &&
         amount < 1000000 &&
         amount !== 2024 &&
@@ -707,12 +718,7 @@ export function parseReceiptTextWithHeuristics(
     }
   }
 
-  // If no total extracted from keywords, but line items exist, sum them up
-  if (totalAmount === 0 && lineItems.length > 0) {
-    totalAmount = lineItems.reduce((acc, cur) => acc + cur.total, 0);
-  }
-
-  // Pass 3: If still no total, search for the most likely currency amount in all lines
+  // Pass 3: If still no total, search for the most likely currency amount in explicit currency symbols
   if (totalAmount === 0) {
     const allNumbers = cleanText.match(/(?:NT\$|\$)\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?|[0-9]+)/g);
     if (allNumbers) {
@@ -739,13 +745,14 @@ export function parseReceiptTextWithHeuristics(
   }
 
   // AI Confidence
-  let aiConfidence = 85;
-  if (providerName && totalAmount > 0 && extractedDate) {
-    aiConfidence = 94;
+  let aiConfidence = 30;
+  const hasLegitProvider = providerName && providerName !== '醫療院所/藥局' && providerName !== 'Medical Provider';
+  if (hasLegitProvider && totalAmount > 0) {
+    aiConfidence = 85;
   } else if (totalAmount > 0) {
-    aiConfidence = 80;
+    aiConfidence = 60;
   } else {
-    aiConfidence = 50;
+    aiConfidence = 20;
   }
 
   const notes = isZh
@@ -762,6 +769,7 @@ export function parseReceiptTextWithHeuristics(
     aiConfidence,
     notes,
     lineItems,
+    recognitionSource: 'LOCAL_OCR',
   };
 }
 
@@ -867,8 +875,8 @@ CRITICAL RULES FOR PATIENT OUT-OF-POCKET EXPENSES VS INSURANCE:
                 parts: [
                   { text: prompt },
                   {
-                    inline_data: {
-                      mime_type: mimeType,
+                    inlineData: {
+                      mimeType,
                       data: base64Data,
                     },
                   },
@@ -878,15 +886,21 @@ CRITICAL RULES FOR PATIENT OUT-OF-POCKET EXPENSES VS INSURANCE:
             generationConfig: {
               responseMimeType: 'application/json',
               temperature: 0.1,
+              thinkingConfig: {
+                thinkingLevel: 'minimal',
+              },
             },
           });
 
           const modelsToTry = [
+            'gemini-3.5-flash',
+            'gemini-3.5-flash-lite',
+            'gemini-3.1-flash-lite',
             'gemini-3.8-flash',
             'gemini-flash-latest',
             'gemini-flash-lite-latest',
-            'gemini-2.5-flash-lite',
           ];
+          let lastGeminiError = '';
           for (const modelName of modelsToTry) {
             try {
               const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${encodeURIComponent(rawKey)}`;
@@ -898,7 +912,7 @@ CRITICAL RULES FOR PATIENT OUT-OF-POCKET EXPENSES VS INSURANCE:
 
               if (response.ok) {
                 const json = await response.json();
-                const parts = json?.candidates?.[0]?.content?.parts || [];
+                const parts = (json?.candidates?.[0]?.content?.parts || []).filter((p: any) => !p?.thought);
                 let rawResultText = '';
                 for (const p of parts) {
                   if (p?.text) {
@@ -931,27 +945,46 @@ CRITICAL RULES FOR PATIENT OUT-OF-POCKET EXPENSES VS INSURANCE:
                       notes: parsed.notes || '',
                       lineItems: Array.isArray(parsed.lineItems)
                         ? parsed.lineItems
-                            .filter((li: any) => (Number(li.total) || Number(li.unitPrice) || 0) > 0)
-                            .map((li: any, idx: number) => ({
-                              id: `li_${Date.now()}_${idx}`,
-                              description: String(li.description || '項目'),
-                              quantity: Number(li.quantity) || 1,
-                              unitPrice: Number(li.unitPrice) || Number(li.total) || 0,
-                              total: Number(li.total) || 0,
-                              isInsuranceEligible: Boolean(li.isInsuranceEligible ?? true),
-                              isTaxDeductible: Boolean(li.isTaxDeductible ?? true),
-                            }))
+                            .map((li: any, idx: number) => {
+                              let patientAmt = li.selfPaidAmount !== undefined && li.selfPaidAmount !== null
+                                ? Number(li.selfPaidAmount)
+                                : (Number(li.total) || Number(li.amount) || Number(li.unitPrice) || 0);
+                              if (isNaN(patientAmt)) patientAmt = 0;
+                              return {
+                                id: `li_${Date.now()}_${idx}`,
+                                description: String(li.description || li.name || '項目'),
+                                quantity: Number(li.quantity) || 1,
+                                unitPrice: patientAmt,
+                                total: patientAmt,
+                                isInsuranceEligible: Boolean(
+                                  li.isInsuranceEligible ??
+                                    (Number(li.insuranceAmount) > 0 || String(li.description || li.name || '').includes('負擔'))
+                                ),
+                                isTaxDeductible: Boolean(li.isTaxDeductible ?? true),
+                              };
+                            })
+                            .filter((li: ReceiptLineItem) => li.total > 0)
                         : [],
+                      recognitionSource: 'GEMINI',
                     };
                   }
                 }
+              } else {
+                const errData = await response.json().catch(() => null);
+                const errMsg = errData?.error?.message || `HTTP ${response.status}`;
+                lastGeminiError = errMsg;
+                console.warn(`Gemini model ${modelName} returned status ${response.status}:`, errMsg);
               }
-            } catch (modelErr) {
+            } catch (modelErr: any) {
+              lastGeminiError = modelErr?.message || String(modelErr);
               console.warn(`Gemini model ${modelName} call failed, trying next:`, modelErr);
             }
           }
+          if (lastGeminiError) {
+            console.warn('All Gemini models exhausted. Reason:', lastGeminiError);
+          }
         }
-      } catch (err) {
+      } catch (err: any) {
         console.warn('Gemini cloud API failed, falling back to on-device OCR:', err);
       }
     }
