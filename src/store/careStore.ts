@@ -121,7 +121,14 @@ interface CareStoreState {
 
 const STORAGE_KEY = 'carecircle_family_hub_v2';
 const LEGACY_KEYS = ['carecircle_family_hub_v3', 'carecircle_family_hub_v1'];
-const DEFAULT_GEMINI_KEY: string = (import.meta as any).env?.VITE_GEMINI_API_KEY || '';
+
+export const sanitizeGeminiKey = (key?: string): string => {
+  const trimmed = (key || '').trim();
+  if (!trimmed || trimmed.startsWith('AQ.')) return '';
+  return trimmed;
+};
+
+const DEFAULT_GEMINI_KEY: string = sanitizeGeminiKey((import.meta as any).env?.VITE_GEMINI_API_KEY || '');
 
 const DEMO_DATA_ZH_TW = {
   recipient: {
@@ -793,7 +800,7 @@ export const useCareStore = create<CareStoreState>((set, get) => {
       saved?.currencySymbol && !['NT$', 'HK$', 'A$', 'S$', 'CA$'].includes(saved.currencySymbol)
         ? saved.currencySymbol
         : '$',
-    geminiApiKey: saved?.geminiApiKey || DEFAULT_GEMINI_KEY,
+    geminiApiKey: sanitizeGeminiKey(saved?.geminiApiKey) || DEFAULT_GEMINI_KEY,
     isPro: saved?.isPro ?? true,
     isAdmin: saved?.isAdmin ?? false,
     trialStartDate: saved?.trialStartDate || new Date().toISOString(),

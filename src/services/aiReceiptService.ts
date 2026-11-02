@@ -1,3 +1,4 @@
+import Tesseract from 'tesseract.js';
 import { ExpenseCategory, ReceiptLineItem } from '../types/care';
 import { AppLanguage } from '../i18n/translations';
 
@@ -334,22 +335,384 @@ export const SAMPLE_RECEIPT_PRESETS = SAMPLE_PRESETS_ZH_TW;
 export const BUILTIN_GEMINI_API_KEY: string =
   (import.meta as any).env?.VITE_GEMINI_API_KEY || '';
 
+/**
+ * Compresses and downscales large camera photos to a max dimension of 1400px
+ * and converts to JPEG (0.85 quality) via an HTML Canvas element.
+ * This reduces 10MB+ camera captures down to ~150-300KB, preventing browser lag and OOM.
+ */
+export async function compressAndNormalizeImage(
+  dataUrl: string,
+  maxDim = 1400,
+  quality = 0.85
+): Promise<string> {
+  if (typeof window === 'undefined' || !dataUrl.startsWith('data:image/')) {
+    return dataUrl;
+  }
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        let { width, height } = img;
+        if (width <= maxDim && height <= maxDim && dataUrl.length < 500 * 1024) {
+          resolve(dataUrl);
+          return;
+        }
+
+        if (width > height) {
+          if (width > maxDim) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          }
+        } else {
+          if (height > maxDim) {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(dataUrl);
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+        const compressed = canvas.toDataURL('image/jpeg', quality);
+        resolve(compressed);
+      } catch (e) {
+        console.warn('Image canvas compression fallback:', e);
+        resolve(dataUrl);
+      }
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
+/**
+ * Runs on-device OCR using Tesseract.js.
+ * Defaults to Traditional Chinese + English for medical receipts.
+ */
+export async function runLocalTesseractOcr(
+  imageDataUrl: string,
+  lang: AppLanguage = 'zh-TW',
+  onProgress?: (progressPercent: number, status: string) => void
+): Promise<string> {
+  try {
+    const tesseractLang = lang === 'en' ? 'eng' : 'chi_tra+eng';
+    onProgress?.(15, '載入辨識引擎...');
+    const worker = await Tesseract.createWorker(tesseractLang, undefined, {
+      logger: (m) => {
+        if (m.status === 'recognizing text' && typeof m.progress === 'number') {
+          const pct = Math.min(95, Math.round(20 + m.progress * 75));
+          onProgress?.(pct, '正在辨識收據文字...');
+        }
+      },
+    });
+
+    onProgress?.(30, '掃描影像細節...');
+    const ret = await worker.recognize(imageDataUrl);
+    await worker.terminate();
+    onProgress?.(100, '完成辨識');
+    return ret?.data?.text || '';
+  } catch (err) {
+    console.warn('Tesseract chi_tra+eng OCR error, trying eng fallback:', err);
+    try {
+      const worker = await Tesseract.createWorker('eng');
+      const ret = await worker.recognize(imageDataUrl);
+      await worker.terminate();
+      return ret?.data?.text || '';
+    } catch (fallbackErr) {
+      console.error('Tesseract fallback failed:', fallbackErr);
+      return '';
+    }
+  }
+}
+
+/**
+ * Parses raw OCR text using medical receipt heuristics:
+ * - Provider / Clinic name detection
+ * - Date extraction (supporting Western YYYY/MM/DD and Taiwan ROC 113/MM/DD)
+ * - Category inference (Hospital, Pharmacy, Rehab, Caregiver, Supplies, Lab)
+ * - Total amount detection (合计, 總計, 應付, 實付, Total, etc.)
+ * - Line item extraction
+ */
+export function parseReceiptTextWithHeuristics(
+  rawText: string,
+  lang: AppLanguage = 'zh-TW'
+): ExtractedReceiptResult {
+  const isZh = lang !== 'en';
+  const cleanText = rawText.trim();
+
+  const lines = cleanText
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+
+  if (lines.length === 0) {
+    return {
+      providerName: '',
+      date: new Date().toISOString().split('T')[0],
+      category: 'HOSPITAL_CLINIC',
+      totalAmount: 0,
+      isTaxDeductible: true,
+      aiConfidence: 0,
+      notes: isZh
+        ? '⚠️ 未能辨識出清晰文字，請手動輸入收據資料或確保照片光線清晰後重試。'
+        : '⚠️ No legible text detected. Please enter details manually or re-take photo with better lighting.',
+      lineItems: [],
+    };
+  }
+
+  // 1. Date Extraction
+  let extractedDate = new Date().toISOString().split('T')[0];
+  // Check for Taiwan ROC date: e.g., 113年10月15日 or 113/10/15 or 113-10-15
+  const rocMatch = cleanText.match(/(?:民國\s*)?(1[0-2][0-9])[\s\.\/\-年]+(0?[1-9]|1[0-2])[\s\.\/\-月]+(0?[1-9]|[12][0-9]|3[01])/);
+  if (rocMatch) {
+    const rocYear = parseInt(rocMatch[1], 10);
+    const m = rocMatch[2].padStart(2, '0');
+    const d = rocMatch[3].padStart(2, '0');
+    extractedDate = `${rocYear + 1911}-${m}-${d}`;
+  } else {
+    // Check standard YYYY-MM-DD or YYYY/MM/DD
+    const isoMatch = cleanText.match(/(202[0-9])[\s\.\/\-年]+(0?[1-9]|1[0-2])[\s\.\/\-月]+(0?[1-9]|[12][0-9]|3[01])/);
+    if (isoMatch) {
+      const y = isoMatch[1];
+      const m = isoMatch[2].padStart(2, '0');
+      const d = isoMatch[3].padStart(2, '0');
+      extractedDate = `${y}-${m}-${d}`;
+    }
+  }
+
+  // 2. Provider Name Detection
+  let providerName = '';
+  const providerKeywords = [
+    '醫院', '分院', '總院', '診所', '聯合診所', '中醫診所', '牙醫診所', '耳鼻喉科',
+    '眼科', '內科', '骨科', '藥局', '藥房', '衛生所', '長照機構', '護理之家',
+    '物理治療', '復健科', '檢驗所', '醫事檢驗',
+    'Hospital', 'Clinic', 'Pharmacy', 'Health', 'Medical', 'Center', 'Rehab'
+  ];
+
+  for (const line of lines) {
+    const stripped = line.replace(/^[0-9\W]+/, '').trim();
+    if (providerKeywords.some((k) => line.includes(k))) {
+      providerName = stripped;
+      break;
+    }
+  }
+
+  // Fallback provider name: first non-empty header line (if not date or phone or pure numbers)
+  if (!providerName) {
+    for (const line of lines.slice(0, 4)) {
+      const stripped = line.replace(/^[#\*\-=\s]+/, '').trim();
+      if (
+        stripped.length >= 2 &&
+        !stripped.match(/^(?:202|11[0-9]|09[0-9]|\(?0[2-8]\)?|收據|發票|收執聯|統一編號)/) &&
+        !stripped.match(/^[0-9\W]+$/)
+      ) {
+        providerName = stripped;
+        break;
+      }
+    }
+  }
+
+  if (!providerName) {
+    providerName = isZh ? '醫療院所/藥局' : 'Medical Provider';
+  }
+
+  // 3. Category Inference
+  let category: ExpenseCategory = 'HOSPITAL_CLINIC';
+  const lowerAll = cleanText.toLowerCase();
+  if (
+    lowerAll.includes('藥局') ||
+    lowerAll.includes('處方') ||
+    lowerAll.includes('藥費') ||
+    lowerAll.includes('藥品') ||
+    lowerAll.includes('pharmacy') ||
+    lowerAll.includes('rx') ||
+    lowerAll.includes('meds')
+  ) {
+    category = 'PHARMACY_MEDS';
+  } else if (
+    lowerAll.includes('看護') ||
+    lowerAll.includes('照服') ||
+    lowerAll.includes('居服') ||
+    lowerAll.includes('居家長照') ||
+    lowerAll.includes('caregiver') ||
+    lowerAll.includes('home care')
+  ) {
+    category = 'IN_HOME_CAREGIVER';
+  } else if (
+    lowerAll.includes('復健') ||
+    lowerAll.includes('物理治療') ||
+    lowerAll.includes('職能治療') ||
+    lowerAll.includes('rehab') ||
+    lowerAll.includes('therapy')
+  ) {
+    category = 'THERAPY_REHAB';
+  } else if (
+    lowerAll.includes('檢驗') ||
+    lowerAll.includes('抽血') ||
+    lowerAll.includes('放射') ||
+    lowerAll.includes('超音波') ||
+    lowerAll.includes('x光') ||
+    lowerAll.includes('lab') ||
+    lowerAll.includes('diagnostics')
+  ) {
+    category = 'LAB_DIAGNOSTICS';
+  } else if (
+    lowerAll.includes('耗材') ||
+    lowerAll.includes('輔具') ||
+    lowerAll.includes('尿布') ||
+    lowerAll.includes('輪椅') ||
+    lowerAll.includes('supplies')
+  ) {
+    category = 'MEDICAL_SUPPLIES';
+  }
+
+  // 4. Total Amount Extraction
+  let totalAmount = 0;
+  const totalKeywords = [
+    '合計', '總計', '實付', '應付', '總額', '總金額', '自費金額', '收費金額', '繳費金額',
+    '金額', '結帳', '現金', '刷卡',
+    'Total', 'Grand Total', 'Amount Due', 'Amount Paid', 'Net Amount', 'Balance Due'
+  ];
+
+  // Pass 1: Look for lines explicitly mentioning total keywords
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (totalKeywords.some((k) => line.includes(k))) {
+      // Find amounts in this line or the immediate next line
+      const lineCombined = `${line} ${lines[i + 1] || ''}`;
+      const amountMatches = lineCombined.match(/(?:NT\$|\$|TWD|￥)?\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?)/g);
+      if (amountMatches) {
+        for (const m of amountMatches) {
+          const numStr = m.replace(/[^0-9.]/g, '');
+          const val = parseFloat(numStr);
+          // Avoid matching year numbers like 2026 or 113 or small tax rate
+          if (val > 0 && val !== 2024 && val !== 2025 && val !== 2026 && val !== 113 && val !== 114) {
+            if (val > totalAmount) {
+              totalAmount = val;
+            }
+          }
+        }
+      }
+      if (totalAmount > 0) break;
+    }
+  }
+
+  // Pass 2: Line items extraction
+  const lineItems: ReceiptLineItem[] = [];
+  const itemLineRegex = /^([^\d$NT]{2,30})[\s:：]+(?:NT\$|\$)?\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?)/;
+
+  for (const line of lines) {
+    // Avoid header lines or total lines
+    if (totalKeywords.some((k) => line.includes(k))) continue;
+    if (line.includes('日期') || line.includes('號碼') || line.includes('統編') || line.includes('病歷')) continue;
+
+    const match = line.match(itemLineRegex);
+    if (match) {
+      const desc = match[1].replace(/[^\w\u4e00-\u9fa5\s]/g, '').trim();
+      const amount = parseFloat(match[2].replace(/,/g, ''));
+      if (desc.length >= 2 && amount > 0 && amount < 1000000 && amount !== 2024 && amount !== 2025 && amount !== 2026) {
+        lineItems.push({
+          id: `li_${Date.now()}_${lineItems.length}`,
+          description: desc,
+          quantity: 1,
+          unitPrice: amount,
+          total: amount,
+          isInsuranceEligible: true,
+          isTaxDeductible: true,
+        });
+      }
+    }
+  }
+
+  // If no total extracted from keywords, but line items exist, sum them up
+  if (totalAmount === 0 && lineItems.length > 0) {
+    totalAmount = lineItems.reduce((acc, cur) => acc + cur.total, 0);
+  }
+
+  // Pass 3: If still no total, search for the most likely currency amount in all lines
+  if (totalAmount === 0) {
+    const allNumbers = cleanText.match(/(?:NT\$|\$)\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?|[0-9]+)/g);
+    if (allNumbers) {
+      for (const raw of allNumbers) {
+        const num = parseFloat(raw.replace(/[^0-9.]/g, ''));
+        if (num > totalAmount && num < 1000000 && num !== 2024 && num !== 2025 && num !== 2026) {
+          totalAmount = num;
+        }
+      }
+    }
+  }
+
+  // If still no line items, create 1 primary line item if totalAmount > 0
+  if (lineItems.length === 0 && totalAmount > 0) {
+    lineItems.push({
+      id: `li_${Date.now()}_0`,
+      description: providerName || (isZh ? '醫療與門診費用' : 'Medical Service Fee'),
+      quantity: 1,
+      unitPrice: totalAmount,
+      total: totalAmount,
+      isInsuranceEligible: true,
+      isTaxDeductible: true,
+    });
+  }
+
+  // AI Confidence
+  let aiConfidence = 85;
+  if (providerName && totalAmount > 0 && extractedDate) {
+    aiConfidence = 94;
+  } else if (totalAmount > 0) {
+    aiConfidence = 80;
+  } else {
+    aiConfidence = 50;
+  }
+
+  const notes = isZh
+    ? `辨識完成：${providerName}（${extractedDate}），金額 NT$ ${totalAmount}`
+    : `Extracted: ${providerName} (${extractedDate}), Total $${totalAmount}`;
+
+  return {
+    providerName,
+    date: extractedDate,
+    category,
+    totalAmount,
+    isTaxDeductible: true,
+    aiConfidence,
+    notes,
+    lineItems,
+  };
+}
+
 export const aiReceiptService = {
   async analyzeReceiptImage(
     imageDataUrl: string,
     fileName: string,
     geminiApiKey?: string,
-    lang: AppLanguage = 'zh-TW'
+    lang: AppLanguage = 'zh-TW',
+    onProgress?: (pct: number, status: string) => void
   ): Promise<ExtractedReceiptResult> {
-    const cleanKey = (geminiApiKey?.trim() || BUILTIN_GEMINI_API_KEY).trim();
-    const presets = getSampleReceiptPresets(lang);
+    onProgress?.(5, '壓縮與優化影像中...');
+    // Step 1: Compress image to avoid browser lag, OOM, and fast upload/OCR
+    const compressedDataUrl = await compressAndNormalizeImage(imageDataUrl, 1400, 0.85);
 
-    if (cleanKey && imageDataUrl.startsWith('data:image/')) {
+    // Step 2: Check if user has a valid Gemini API Key (starts with AIzaSy)
+    const rawKey = (geminiApiKey?.trim() || BUILTIN_GEMINI_API_KEY).trim();
+    const isGeminiKeyValid = rawKey.length > 20 && !rawKey.startsWith('AQ.');
+
+    if (isGeminiKeyValid && compressedDataUrl.startsWith('data:image/')) {
       try {
-        const mimeMatch = imageDataUrl.match(/^data:(image\/[a-zA-Z0-9+.-]+);base64,(.+)$/);
-        if (mimeMatch) {
-          const mimeType = mimeMatch[1];
-          const base64Data = mimeMatch[2];
+        onProgress?.(25, '正在連線 Gemini AI 深度解析...');
+        const commaIdx = compressedDataUrl.indexOf(',');
+        if (commaIdx !== -1) {
+          const header = compressedDataUrl.slice(0, commaIdx);
+          const base64Data = compressedDataUrl.slice(commaIdx + 1);
+          const mimeType = header.split(';')[0].replace('data:', '') || 'image/jpeg';
 
           const langInstruction =
             lang === 'zh-TW'
@@ -407,64 +770,62 @@ Extract the receipt details from this image and return ONLY valid JSON matching 
 
           const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
           for (const modelName of modelsToTry) {
-            const headers: Record<string, string> = {
-              'Content-Type': 'application/json',
-            };
-            const url = cleanKey.startsWith('AQ.')
-              ? `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${encodeURIComponent(cleanKey)}`
-              : `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${encodeURIComponent(cleanKey)}`;
+            try {
+              const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${encodeURIComponent(rawKey)}`;
+              const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: requestBody,
+              });
 
-            const response = await fetch(url, {
-              method: 'POST',
-              headers,
-              body: requestBody,
-            });
-
-            if (response.ok) {
-              const json = await response.json();
-              const rawText = json?.candidates?.[0]?.content?.parts?.[0]?.text;
-              if (rawText) {
-                const parsed = JSON.parse(rawText);
-                if (parsed && parsed.providerName && Array.isArray(parsed.lineItems)) {
-                  return {
-                    providerName: parsed.providerName,
-                    date: parsed.date || new Date().toISOString().split('T')[0],
-                    category: parsed.category || 'HOSPITAL_CLINIC',
-                    totalAmount: Number(parsed.totalAmount) || 0,
-                    isTaxDeductible: Boolean(parsed.isTaxDeductible ?? true),
-                    aiConfidence: Number(parsed.aiConfidence) || 96,
-                    notes: parsed.notes || '',
-                    lineItems: parsed.lineItems.map((li: any, idx: number) => ({
-                      id: `li_${Date.now()}_${idx}`,
-                      description: String(li.description || 'Item'),
-                      quantity: Number(li.quantity) || 1,
-                      unitPrice: Number(li.unitPrice) || Number(li.total) || 0,
-                      total: Number(li.total) || 0,
-                      isInsuranceEligible: Boolean(li.isInsuranceEligible ?? true),
-                      isTaxDeductible: Boolean(li.isTaxDeductible ?? true),
-                    })),
-                  };
+              if (response.ok) {
+                const json = await response.json();
+                const rawResultText = json?.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (rawResultText) {
+                  const parsed = JSON.parse(rawResultText);
+                  if (parsed && (parsed.providerName || parsed.totalAmount !== undefined)) {
+                    onProgress?.(100, 'Gemini AI 辨識完成！');
+                    return {
+                      providerName: parsed.providerName || (lang === 'zh-TW' ? '醫療院所' : 'Medical Provider'),
+                      date: parsed.date || new Date().toISOString().split('T')[0],
+                      category: parsed.category || 'HOSPITAL_CLINIC',
+                      totalAmount: Number(parsed.totalAmount) || 0,
+                      isTaxDeductible: Boolean(parsed.isTaxDeductible ?? true),
+                      aiConfidence: Number(parsed.aiConfidence) || 98,
+                      notes: parsed.notes || '',
+                      lineItems: Array.isArray(parsed.lineItems)
+                        ? parsed.lineItems.map((li: any, idx: number) => ({
+                            id: `li_${Date.now()}_${idx}`,
+                            description: String(li.description || '項目'),
+                            quantity: Number(li.quantity) || 1,
+                            unitPrice: Number(li.unitPrice) || Number(li.total) || 0,
+                            total: Number(li.total) || 0,
+                            isInsuranceEligible: Boolean(li.isInsuranceEligible ?? true),
+                            isTaxDeductible: Boolean(li.isTaxDeductible ?? true),
+                          }))
+                        : [],
+                    };
+                  }
                 }
               }
+            } catch (modelErr) {
+              console.warn(`Gemini model ${modelName} call failed, trying next:`, modelErr);
             }
           }
         }
       } catch (err) {
-        console.warn('Gemini receipt OCR fallback triggered:', err);
+        console.warn('Gemini cloud API failed, falling back to on-device OCR:', err);
       }
     }
 
-    await new Promise((r) => setTimeout(r, 750));
-    const lower = fileName.toLowerCase();
-    if (lower.includes('pharm') || lower.includes('cvs') || lower.includes('rx')) {
-      return presets[1].result;
-    }
-    if (lower.includes('care') || lower.includes('nurse')) {
-      return presets[2].result;
-    }
-    if (lower.includes('pt') || lower.includes('rehab')) {
-      return presets[3].result;
-    }
-    return presets[0].result;
+    // Step 3: Local on-device OCR using Tesseract.js (Offline / Zero-API-Key fallback)
+    onProgress?.(30, '啟動本地文字辨識引擎 (Tesseract OCR)...');
+    const rawOcrText = await runLocalTesseractOcr(compressedDataUrl, lang, onProgress);
+
+    // Step 4: Parse OCR text with heuristics
+    onProgress?.(95, '分析醫療單據項目與金額...');
+    const result = parseReceiptTextWithHeuristics(rawOcrText, lang);
+    onProgress?.(100, '辨識完成！');
+    return result;
   },
 };

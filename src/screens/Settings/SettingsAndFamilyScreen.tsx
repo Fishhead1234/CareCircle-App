@@ -18,6 +18,12 @@ import {
   Copy,
   Database,
   Link2,
+  Sparkles,
+  Key,
+  ExternalLink,
+  Eye,
+  EyeOff,
+  Loader2,
 } from 'lucide-react';
 import { useCareStore } from '../../store/careStore';
 import { pdfReportService } from '../../services/pdfReportService';
@@ -59,10 +65,18 @@ export const SettingsAndFamilyScreen: React.FC = () => {
     exportSyncJson,
     importSyncJson,
     resetToDemoData,
+    geminiApiKey,
+    setGeminiApiKey,
     t,
   } = useCareStore();
 
   const [pdfTaxOnly, setPdfTaxOnly] = useState(false);
+
+  // Gemini API Key management
+  const [geminiKeyInput, setGeminiKeyInput] = useState(geminiApiKey || '');
+  const [showGeminiKey, setShowGeminiKey] = useState(false);
+  const [isTestingKey, setIsTestingKey] = useState(false);
+  const [keyTestResult, setKeyTestResult] = useState<{ success: boolean; msg: string } | null>(null);
 
   // Add Member
   const [newMemberName, setNewMemberName] = useState('');
@@ -198,6 +212,82 @@ export const SettingsAndFamilyScreen: React.FC = () => {
       setBannerMsg('✓ SQL script ready');
     }
     setTimeout(() => setBannerMsg(null), 4000);
+  };
+
+  const handleClearGeminiKey = () => {
+    setGeminiKeyInput('');
+    setGeminiApiKey('');
+    setKeyTestResult(null);
+    setBannerMsg(
+      language === 'zh-TW' ? '✓ 已清除金鑰，切換回本地 OCR 模式' : '✓ Switched to local OCR mode'
+    );
+    setTimeout(() => setBannerMsg(null), 4000);
+  };
+
+  const handleSaveGeminiKey = () => {
+    const clean = geminiKeyInput.trim();
+    setGeminiApiKey(clean);
+    setBannerMsg(
+      clean
+        ? (language === 'zh-TW' ? '✓ Google Gemini API Key 已成功儲存！' : '✓ Google Gemini API Key saved!')
+        : (language === 'zh-TW' ? '✓ 已清除金鑰，切換回本地 OCR 模式' : '✓ Switched to local OCR mode')
+    );
+    setTimeout(() => setBannerMsg(null), 4000);
+  };
+
+  const handleTestGeminiKey = async () => {
+    const keyToTest = geminiKeyInput.trim();
+    if (!keyToTest) {
+      setKeyTestResult({
+        success: false,
+        msg: language === 'zh-TW' ? '請先輸入 Gemini API Key' : 'Please enter a Gemini API Key',
+      });
+      return;
+    }
+    if (keyToTest.startsWith('AQ.')) {
+      setKeyTestResult({
+        success: false,
+        msg: language === 'zh-TW'
+          ? '此金鑰格式為 AQ. 開頭，不是 Google AI Studio 標準 API Key（標準格式開頭為 AIzaSy...）'
+          : 'Invalid key format (starts with AQ). Google AI Studio keys start with AIzaSy...',
+      });
+      return;
+    }
+
+    setIsTestingKey(true);
+    setKeyTestResult(null);
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(keyToTest)}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: 'Ping test' }] }],
+          }),
+        }
+      );
+      if (res.ok) {
+        setKeyTestResult({
+          success: true,
+          msg: language === 'zh-TW' ? '✅ 連線成功！Google Gemini API 已可正常運作。' : '✅ Connection successful! Gemini API is working.',
+        });
+        setGeminiApiKey(keyToTest);
+      } else {
+        const errJson = await res.json().catch(() => ({}));
+        setKeyTestResult({
+          success: false,
+          msg: `❌ 連線失敗 (${res.status})：${errJson?.error?.message || '請檢查金鑰是否有效'}`,
+        });
+      }
+    } catch (e: any) {
+      setKeyTestResult({
+        success: false,
+        msg: `❌ 網路或伺服器連線異常：${e.message}`,
+      });
+    } finally {
+      setIsTestingKey(false);
+    }
   };
 
   const handleVersionTap = () => {
@@ -640,7 +730,123 @@ export const SettingsAndFamilyScreen: React.FC = () => {
         </form>
       </div>
 
-      {/* 6. Family Sync (.json Export & Import) & Demo Reset */}
+      {/* 6. Google Gemini AI Receipt Recognition API */}
+      <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4 shadow-sm space-y-3">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-1.5">
+              <Sparkles className="w-4 h-4 text-purple-600" />
+              <span>
+                {language === 'zh-TW'
+                  ? 'Google Gemini AI 收據辨識 (選用設定)'
+                  : 'Google Gemini AI Receipt Scanner (Optional)'}
+              </span>
+            </h3>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
+              {language === 'zh-TW'
+                ? '拍照或上傳收據時，透過 Gemini 多模態 AI 辨識看診院所、日期與項目金額。若未設定金鑰，系統亦內建完全免費、支援離線的本地 OCR 辨識引擎。'
+                : 'Extract provider, date, and line items with Gemini Vision AI. When omitted, built-in local OCR engine runs automatically.'}
+            </p>
+          </div>
+          <a
+            href="https://aistudio.google.com/app/apikey"
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-700 dark:text-purple-300 text-[11px] font-bold shrink-0"
+          >
+            <span>{language === 'zh-TW' ? '免費獲取 API Key' : 'Get Free Key'}</span>
+            <ExternalLink className="w-3 h-3" />
+          </a>
+        </div>
+
+        {/* Status Pill */}
+        <div className="flex items-center gap-2">
+          <span
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${
+              geminiApiKey.length > 20 && !geminiApiKey.startsWith('AQ.')
+                ? 'bg-purple-500/15 text-purple-700 dark:text-purple-300'
+                : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            {geminiApiKey.length > 20 && !geminiApiKey.startsWith('AQ.')
+              ? (language === 'zh-TW' ? '✨ Gemini 雲端 AI 模式 (已啟用)' : '✨ Gemini Cloud AI Enabled')
+              : (language === 'zh-TW' ? '⚡ 本地 OCR 離線模式 (預設啟用，免金鑰)' : '⚡ Local OCR Offline Mode (Active)')}
+          </span>
+        </div>
+
+        {/* Key Input & Actions */}
+        <div className="space-y-2">
+          <div className="relative">
+            <input
+              type={showGeminiKey ? 'text' : 'password'}
+              value={geminiKeyInput}
+              onChange={(e) => {
+                setGeminiKeyInput(e.target.value);
+                setKeyTestResult(null);
+              }}
+              placeholder="貼上 Google AI Studio API Key (AIzaSy...)"
+              className="w-full pl-9 pr-10 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-mono text-slate-900 dark:text-white"
+            />
+            <Key className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+            <button
+              type="button"
+              onClick={() => setShowGeminiKey(!showGeminiKey)}
+              className="p-1 text-slate-400 hover:text-slate-600 absolute right-2.5 top-2.5 cursor-pointer"
+            >
+              {showGeminiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
+
+          {keyTestResult && (
+            <div
+              className={`p-2.5 rounded-xl text-xs font-medium ${
+                keyTestResult.success
+                  ? 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-200 border border-emerald-500/30'
+                  : 'bg-rose-500/15 text-rose-800 dark:text-rose-200 border border-rose-500/30'
+              }`}
+            >
+              {keyTestResult.msg}
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <button
+              type="button"
+              onClick={handleSaveGeminiKey}
+              className="px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-sm cursor-pointer"
+            >
+              {language === 'zh-TW' ? '儲存金鑰' : 'Save Key'}
+            </button>
+            <button
+              type="button"
+              onClick={handleTestGeminiKey}
+              disabled={isTestingKey || !geminiKeyInput.trim()}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-purple-300 dark:border-purple-700 hover:bg-purple-50 dark:hover:bg-purple-950/30 text-purple-700 dark:text-purple-300 font-bold text-xs cursor-pointer disabled:opacity-50"
+            >
+              {isTestingKey ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>{language === 'zh-TW' ? '連線測試中...' : 'Testing...'}</span>
+                </>
+              ) : (
+                <span>{language === 'zh-TW' ? '連線測試' : 'Test Connection'}</span>
+              )}
+            </button>
+            {geminiKeyInput && (
+              <button
+                type="button"
+                onClick={handleClearGeminiKey}
+                className="px-3 py-2 text-xs font-bold text-rose-500 hover:text-rose-600 cursor-pointer"
+              >
+                {language === 'zh-TW' ? '清除金鑰' : 'Clear Key'}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 7. Family Sync (.json Export & Import) & Demo Reset */}
       <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4 shadow-sm space-y-3">
         <div>
           <h3 className="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-1.5">
