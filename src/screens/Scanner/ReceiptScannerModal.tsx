@@ -21,11 +21,7 @@ import {
   ReceiptLineItem,
   EXPENSE_CATEGORY_META,
 } from '../../types/care';
-import {
-  aiReceiptService,
-  getSampleReceiptPresets,
-  SampleReceiptPreset,
-} from '../../services/aiReceiptService';
+import { aiReceiptService } from '../../services/aiReceiptService';
 
 interface ReceiptScannerModalProps {
   isOpen: boolean;
@@ -62,11 +58,17 @@ export const ReceiptScannerModal: React.FC<ReceiptScannerModalProps> = ({ isOpen
 
   if (!isOpen) return null;
 
-  const samplePresets = getSampleReceiptPresets(language);
   const isZh = language !== 'en';
-  const hasValidGeminiKey = geminiApiKey.length > 20 && !geminiApiKey.startsWith('AQ.');
+  const hasValidGeminiKey = geminiApiKey.length > 15;
 
-  const applyExtractedResult = (res: SampleReceiptPreset['result']) => {
+  const applyExtractedResult = (res: {
+    providerName: string;
+    date: string;
+    category: ExpenseCategory;
+    totalAmount: number;
+    isTaxDeductible: boolean;
+    lineItems: ReceiptLineItem[];
+  }) => {
     if (res.providerName) setProviderName(res.providerName);
     if (res.date) setDate(res.date);
     if (res.category) setCategory(res.category);
@@ -75,23 +77,6 @@ export const ReceiptScannerModal: React.FC<ReceiptScannerModalProps> = ({ isOpen
     if (res.lineItems && res.lineItems.length > 0) {
       setLineItems(res.lineItems);
     }
-  };
-
-  const handleSamplePreset = async (preset: SampleReceiptPreset) => {
-    setIsScanning(true);
-    setScanSuccessBanner(null);
-    setScanWarningBanner(null);
-    setScanProgressPercent(50);
-    setScanStatusText(isZh ? '載入範例收據中...' : 'Loading sample bill...');
-    await new Promise((r) => setTimeout(r, 450));
-    applyExtractedResult(preset.result);
-    setScanProgressPercent(100);
-    setIsScanning(false);
-    setScanSuccessBanner(
-      isZh
-        ? `✨ 已載入範例收據「${preset.title}」`
-        : `✨ Loaded sample receipt "${preset.title}"`
-    );
   };
 
   const processReceiptDataUrl = async (dataUrl: string, fileName: string) => {
@@ -448,30 +433,17 @@ export const ReceiptScannerModal: React.FC<ReceiptScannerModalProps> = ({ isOpen
               </div>
             )}
 
-            <div className="text-[11px] text-slate-500 dark:text-slate-400 mb-2">
-              {t('scanner_sample_hint')}
-            </div>
-
-            {/* 4 Quick Sample Receipts */}
-            <div className="grid grid-cols-2 gap-2">
-              {samplePresets.map((preset) => (
-                <button
-                  key={preset.id}
-                  type="button"
-                  onClick={() => handleSamplePreset(preset)}
-                  disabled={isScanning}
-                  className="text-left p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-teal-500 transition cursor-pointer"
-                >
-                  <div className="text-[10px] font-bold text-teal-600 dark:text-teal-400">
-                    {preset.badge}
-                  </div>
-                  <div className="text-xs font-bold text-slate-900 dark:text-white truncate mt-0.5">
-                    {preset.title}
-                  </div>
-                  <div className="text-[10px] text-slate-500 truncate">{preset.subtitle}</div>
-                </button>
-              ))}
-            </div>
+            {/* Helpful Guide when no preview */}
+            {!receiptPreview && !isScanning && (
+              <div className="py-2 px-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/60 text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />
+                <span>
+                  {isZh
+                    ? '請點擊上方「拍照」或「相簿」上傳醫療收據。AI 將自動辨識醫院診所名稱、費用表格項目與實收金額。'
+                    : 'Tap "Take Photo" or "Choose Photo" above. AI will automatically read hospital names, item tables, and amounts.'}
+                </span>
+              </div>
+            )}
 
             {/* Scanning Progress Bar & Status */}
             {isScanning && (

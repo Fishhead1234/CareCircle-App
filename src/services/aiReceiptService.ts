@@ -333,7 +333,7 @@ export const getSampleReceiptPresets = (lang: AppLanguage = 'zh-TW'): SampleRece
 export const SAMPLE_RECEIPT_PRESETS = SAMPLE_PRESETS_ZH_TW;
 
 export const BUILTIN_GEMINI_API_KEY: string =
-  (import.meta as any).env?.VITE_GEMINI_API_KEY || '';
+  (import.meta as any).env?.VITE_GEMINI_API_KEY?.trim() || '';
 
 /**
  * Compresses and downscales large camera photos to a max dimension of 1400px
@@ -491,6 +491,7 @@ export function parseReceiptTextWithHeuristics(
   // 2. Provider Name Detection
   let providerName = '';
   const providerKeywords = [
+    '三軍總醫院', '榮民總醫院', '長庚紀念醫院', '台灣大學醫學院附設醫院', '台大醫院', '馬偕紀念醫院', '新光醫院', '國泰醫院',
     '醫院', '分院', '總院', '診所', '聯合診所', '中醫診所', '牙醫診所', '耳鼻喉科',
     '眼科', '內科', '骨科', '藥局', '藥房', '衛生所', '長照機構', '護理之家',
     '物理治療', '復健科', '檢驗所', '醫事檢驗',
@@ -498,10 +499,17 @@ export function parseReceiptTextWithHeuristics(
   ];
 
   for (const line of lines) {
+    // Skip invoice numbers, registration numbers, patient info
+    if (line.match(/^(?:No\.|NO\.|No\s|編號|病歷|序號|統編|0[0-9]{8,}|11[0-9]{8,})/i)) continue;
     const stripped = line.replace(/^[0-9\W]+/, '').trim();
     if (providerKeywords.some((k) => line.includes(k))) {
-      providerName = stripped;
-      break;
+      // Clean trailing receipt keywords
+      providerName = stripped
+        .replace(/(?:住院|門診)?醫療費用收據.*$/, '')
+        .replace(/收執聯.*$/, '')
+        .replace(/收據.*$/, '')
+        .trim();
+      if (providerName.length >= 2) break;
     }
   }
 
@@ -511,7 +519,7 @@ export function parseReceiptTextWithHeuristics(
       const stripped = line.replace(/^[#\*\-=\s]+/, '').trim();
       if (
         stripped.length >= 2 &&
-        !stripped.match(/^(?:202|11[0-9]|09[0-9]|\(?0[2-8]\)?|收據|發票|收執聯|統一編號)/) &&
+        !stripped.match(/^(?:202|11[0-9]|09[0-9]|\(?0[2-8]\)?|收據|發票|收執聯|統一編號|No\.|NO\.)/i) &&
         !stripped.match(/^[0-9\W]+$/)
       ) {
         providerName = stripped;
@@ -577,9 +585,9 @@ export function parseReceiptTextWithHeuristics(
   // 4. Total Amount Extraction
   let totalAmount = 0;
   const totalKeywords = [
-    '合計', '總計', '實付', '應付', '總額', '總金額', '自費金額', '收費金額', '繳費金額',
+    '實收金額', '應收金額', '實付', '應付', '合計', '總計', '總額', '總金額', '自費金額', '收費金額', '繳費金額',
     '金額', '結帳', '現金', '刷卡',
-    'Total', 'Grand Total', 'Amount Due', 'Amount Paid', 'Net Amount', 'Balance Due'
+    'Amount Received', 'Patient\'s payable Amount', 'Total', 'Grand Total', 'Amount Due', 'Amount Paid', 'Net Amount', 'Balance Due'
   ];
 
   // Pass 1: Look for lines explicitly mentioning total keywords
@@ -593,8 +601,8 @@ export function parseReceiptTextWithHeuristics(
         for (const m of amountMatches) {
           const numStr = m.replace(/[^0-9.]/g, '');
           const val = parseFloat(numStr);
-          // Avoid matching year numbers like 2026 or 113 or small tax rate
-          if (val > 0 && val !== 2024 && val !== 2025 && val !== 2026 && val !== 113 && val !== 114) {
+          // Avoid matching year numbers like 2026 or 115 or registration numbers
+          if (val > 0 && val !== 2024 && val !== 2025 && val !== 2026 && val !== 113 && val !== 114 && val !== 115 && val < 5000000) {
             if (val > totalAmount) {
               totalAmount = val;
             }
@@ -610,15 +618,37 @@ export function parseReceiptTextWithHeuristics(
   const itemLineRegex = /^([^\d$NT]{2,30})[\s:：]+(?:NT\$|\$)?\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?)/;
 
   for (const line of lines) {
-    // Avoid header lines or total lines
+    // Avoid header lines, patient info, date rows, or total lines
     if (totalKeywords.some((k) => line.includes(k))) continue;
-    if (line.includes('日期') || line.includes('號碼') || line.includes('統編') || line.includes('病歷')) continue;
+    if (
+      line.includes('日期') ||
+      line.includes('號碼') ||
+      line.includes('統編') ||
+      line.includes('病歷') ||
+      line.includes('姓名') ||
+      line.includes('起迄') ||
+      line.includes('開單') ||
+      line.includes('電話') ||
+      line.includes('印花') ||
+      line.includes('收訖章')
+    ) {
+      continue;
+    }
 
     const match = line.match(itemLineRegex);
     if (match) {
-      const desc = match[1].replace(/[^\w\u4e00-\u9fa5\s]/g, '').trim();
+      const desc = match[1].replace(/[^\w\u4e00-\u9fa5\s()（）]/g, '').trim();
       const amount = parseFloat(match[2].replace(/,/g, ''));
-      if (desc.length >= 2 && amount > 0 && amount < 1000000 && amount !== 2024 && amount !== 2025 && amount !== 2026) {
+      if (
+        desc.length >= 2 &&
+        amount > 0 &&
+        amount < 1000000 &&
+        amount !== 2024 &&
+        amount !== 2025 &&
+        amount !== 2026 &&
+        amount !== 115 &&
+        amount !== 113
+      ) {
         lineItems.push({
           id: `li_${Date.now()}_${lineItems.length}`,
           description: desc,
@@ -701,13 +731,13 @@ export const aiReceiptService = {
     // Step 1: Compress image to avoid browser lag, OOM, and fast upload/OCR
     const compressedDataUrl = await compressAndNormalizeImage(imageDataUrl, 1400, 0.85);
 
-    // Step 2: Check if user has a valid Gemini API Key (starts with AIzaSy)
+    // Step 2: Check if user has a Gemini API Key (built-in or user configured)
     const rawKey = (geminiApiKey?.trim() || BUILTIN_GEMINI_API_KEY).trim();
-    const isGeminiKeyValid = rawKey.length > 20 && !rawKey.startsWith('AQ.');
+    const isGeminiKeyValid = rawKey.length > 15;
 
     if (isGeminiKeyValid && compressedDataUrl.startsWith('data:image/')) {
       try {
-        onProgress?.(25, '正在連線 Gemini AI 深度解析...');
+        onProgress?.(25, '正在連線 Gemini AI 深度解析表格與雙語項目...');
         const commaIdx = compressedDataUrl.indexOf(',');
         if (commaIdx !== -1) {
           const header = compressedDataUrl.slice(0, commaIdx);
@@ -725,20 +755,30 @@ export const aiReceiptService = {
               ? 'Use Korean (한국어) for providerName, notes, and item descriptions.'
               : 'Use clear, simple English.';
 
-          const prompt = `You are a helpful family medical receipt reader. ${langInstruction}
-Extract the receipt details from this image and return ONLY valid JSON matching this exact structure:
+          const prompt = `You are an expert medical receipt, hospital bill, and clinic invoice reader. ${langInstruction}
+Analyze this medical/hospital receipt image very carefully.
+Receipts often contain complex tabular charts with columns like:
+[項目 Item | 健保金額 Insurance Amount | 自費金額 Self-paid Amount | ...]
+and summary boxes like:
+[住院部分負擔金額 Copayment, 自費金額 Self-paid, 應收金額 Patient's payable, 實收金額 Amount Received].
+
+Extract the receipt details and return ONLY a valid JSON object matching this exact structure:
 {
-  "providerName": "Clinic, Hospital, or Pharmacy Name",
+  "providerName": "Official hospital or clinic name in Traditional Chinese (e.g. 三軍總醫院附設民眾診療服務處)",
+  "receiptNumber": "Invoice or Receipt number (e.g. 115102610174)",
+  "patientName": "Patient name if shown (e.g. 范光明)",
   "date": "YYYY-MM-DD",
   "category": "HOSPITAL_CLINIC" | "PHARMACY_MEDS" | "IN_HOME_CAREGIVER" | "MEDICAL_SUPPLIES" | "THERAPY_REHAB" | "LAB_DIAGNOSTICS",
   "totalAmount": number,
+  "copaymentAmount": number,
+  "selfPaidAmount": number,
   "isTaxDeductible": boolean,
   "aiConfidence": number,
-  "notes": "Short 1-sentence summary",
+  "notes": "Clear summary of inpatient/outpatient services and total payment",
   "lineItems": [
     {
       "id": "li_1",
-      "description": "Simple item description",
+      "description": "Item description with code and bilingual text if present (e.g. 01. 診察費 (DIAGNOSE FEE))",
       "quantity": number,
       "unitPrice": number,
       "total": number,
@@ -746,7 +786,22 @@ Extract the receipt details from this image and return ONLY valid JSON matching 
       "isTaxDeductible": boolean
     }
   ]
-}`;
+}
+
+CRITICAL RULES FOR TABULAR RECEIPTS:
+1. Provider Name: Extract the official hospital, clinic, or pharmacy name from the top header or official circular seal/stamp (e.g. 三軍總醫院, 台大醫院, 台北榮總). NEVER use the serial invoice/receipt number (like No.115...) as providerName!
+2. Date: Convert Taiwan ROC year (民國紀年) to Gregorian year (西元年). For example:
+   - 115/10/26 -> 2026-10-26 (115 + 1911 = 2026)
+   - 113/10/26 -> 2024-10-26
+   Prefer the bill date (開單日期 / 費用起訖日期).
+3. Total Amount:
+   - Must be the actual final amount paid or payable by the patient: 實收金額 (Amount Received) or 應收金額 (Patient Payable Amount).
+   - In Taiwan hospital receipts with 住院部分負擔 (Copayment) and 自費 (Self-paid), totalAmount is the sum (實收金額, e.g. 4,905). Do NOT confuse totalAmount with copayment alone!
+4. Line Items:
+   - ONLY include items where the cost is strictly GREATER than 0!
+   - EXCLUDE all table rows where both 健保金額 and 自費金額 are 0 (e.g. 手術費 0, 麻醉費 0, 血液費 0 must NOT be in lineItems).
+   - For items with non-zero amounts, use the non-zero amount as total (e.g. 01. 診察費 4173, 03. 伙食費 1870, 04. 檢查費 12695, 12. 特殊材料費 100, 13. 藥費 580, 14. 藥事服務費 912).
+`;
 
           const requestBody = JSON.stringify({
             contents: [
@@ -768,7 +823,12 @@ Extract the receipt details from this image and return ONLY valid JSON matching 
             },
           });
 
-          const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+          const modelsToTry = [
+            'gemini-3.8-flash',
+            'gemini-flash-latest',
+            'gemini-flash-lite-latest',
+            'gemini-2.5-flash-lite',
+          ];
           for (const modelName of modelsToTry) {
             try {
               const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${encodeURIComponent(rawKey)}`;
@@ -785,24 +845,30 @@ Extract the receipt details from this image and return ONLY valid JSON matching 
                   const parsed = JSON.parse(rawResultText);
                   if (parsed && (parsed.providerName || parsed.totalAmount !== undefined)) {
                     onProgress?.(100, 'Gemini AI 辨識完成！');
+                    const finalTotal =
+                      Number(parsed.totalAmount) ||
+                      (Number(parsed.copaymentAmount) || 0) + (Number(parsed.selfPaidAmount) || 0);
+
                     return {
                       providerName: parsed.providerName || (lang === 'zh-TW' ? '醫療院所' : 'Medical Provider'),
                       date: parsed.date || new Date().toISOString().split('T')[0],
                       category: parsed.category || 'HOSPITAL_CLINIC',
-                      totalAmount: Number(parsed.totalAmount) || 0,
+                      totalAmount: finalTotal,
                       isTaxDeductible: Boolean(parsed.isTaxDeductible ?? true),
                       aiConfidence: Number(parsed.aiConfidence) || 98,
                       notes: parsed.notes || '',
                       lineItems: Array.isArray(parsed.lineItems)
-                        ? parsed.lineItems.map((li: any, idx: number) => ({
-                            id: `li_${Date.now()}_${idx}`,
-                            description: String(li.description || '項目'),
-                            quantity: Number(li.quantity) || 1,
-                            unitPrice: Number(li.unitPrice) || Number(li.total) || 0,
-                            total: Number(li.total) || 0,
-                            isInsuranceEligible: Boolean(li.isInsuranceEligible ?? true),
-                            isTaxDeductible: Boolean(li.isTaxDeductible ?? true),
-                          }))
+                        ? parsed.lineItems
+                            .filter((li: any) => (Number(li.total) || Number(li.unitPrice) || 0) > 0)
+                            .map((li: any, idx: number) => ({
+                              id: `li_${Date.now()}_${idx}`,
+                              description: String(li.description || '項目'),
+                              quantity: Number(li.quantity) || 1,
+                              unitPrice: Number(li.unitPrice) || Number(li.total) || 0,
+                              total: Number(li.total) || 0,
+                              isInsuranceEligible: Boolean(li.isInsuranceEligible ?? true),
+                              isTaxDeductible: Boolean(li.isTaxDeductible ?? true),
+                            }))
                         : [],
                     };
                   }

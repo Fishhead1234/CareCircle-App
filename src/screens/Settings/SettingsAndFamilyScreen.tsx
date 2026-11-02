@@ -244,21 +244,12 @@ export const SettingsAndFamilyScreen: React.FC = () => {
       });
       return;
     }
-    if (keyToTest.startsWith('AQ.')) {
-      setKeyTestResult({
-        success: false,
-        msg: language === 'zh-TW'
-          ? '此金鑰格式為 AQ. 開頭，不是 Google AI Studio 標準 API Key（標準格式開頭為 AIzaSy...）'
-          : 'Invalid key format (starts with AQ). Google AI Studio keys start with AIzaSy...',
-      });
-      return;
-    }
 
     setIsTestingKey(true);
     setKeyTestResult(null);
     try {
       const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(keyToTest)}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${encodeURIComponent(keyToTest)}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -763,13 +754,13 @@ export const SettingsAndFamilyScreen: React.FC = () => {
         <div className="flex items-center gap-2">
           <span
             className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${
-              geminiApiKey.length > 20 && !geminiApiKey.startsWith('AQ.')
+              geminiApiKey.length > 15
                 ? 'bg-purple-500/15 text-purple-700 dark:text-purple-300'
                 : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
             }`}
           >
             <Sparkles className="w-3.5 h-3.5" />
-            {geminiApiKey.length > 20 && !geminiApiKey.startsWith('AQ.')
+            {geminiApiKey.length > 15
               ? (language === 'zh-TW' ? '✨ Gemini 雲端 AI 模式 (已啟用)' : '✨ Gemini Cloud AI Enabled')
               : (language === 'zh-TW' ? '⚡ 本地 OCR 離線模式 (預設啟用，免金鑰)' : '⚡ Local OCR Offline Mode (Active)')}
           </span>
