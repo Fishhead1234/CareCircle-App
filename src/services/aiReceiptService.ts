@@ -8,6 +8,7 @@ export interface ExtractedReceiptResult {
   category: ExpenseCategory;
   totalAmount: number;
   insuranceReimbursedAmount?: number;
+  nhiCoveredAmount?: number;
   copaymentAmount?: number;
   selfPaidAmount?: number;
   isTaxDeductible: boolean;
@@ -625,9 +626,19 @@ export function parseReceiptTextWithHeuristics(
 
   // 4. Total Amount & Insurance Extraction
   let totalAmount = 0;
+  let nhiCoveredAmount = 0;
   // Note: On hospital/clinic bills, 健保申報 (NHI points) is NOT a patient refund.
   // insuranceReimbursedAmount represents actual cash reimbursements from private insurance, so default to 0.
   const insuranceReimbursedAmount = 0;
+
+  const insMatch = cleanText.match(/(?:健保申報|健保給付|健保金額|健保點數|保險金額)[\s:：點]*([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)/);
+  if (insMatch) {
+    const parsedIns = parseFloat(insMatch[1].replace(/,/g, ''));
+    if (parsedIns > 0) {
+      nhiCoveredAmount = parsedIns;
+    }
+  }
+
   const totalKeywords = [
     '實收金額', '應收金額', '實付', '應付', '合計', '總計', '總額', '總金額', '自費金額', '收費金額', '繳費金額',
     '金額', '結帳', '現金', '刷卡',
@@ -758,7 +769,8 @@ export function parseReceiptTextWithHeuristics(
     date: extractedDate,
     category,
     totalAmount,
-    insuranceReimbursedAmount: insuranceReimbursedAmount > 0 ? insuranceReimbursedAmount : undefined,
+    insuranceReimbursedAmount: 0,
+    nhiCoveredAmount: nhiCoveredAmount > 0 ? nhiCoveredAmount : undefined,
     isTaxDeductible: true,
     aiConfidence,
     notes,
@@ -823,7 +835,8 @@ Extract the receipt details and return ONLY a valid JSON object matching this ex
   "date": "YYYY-MM-DD",
   "category": "HOSPITAL_CLINIC" | "PHARMACY_MEDS" | "IN_HOME_CAREGIVER" | "MEDICAL_SUPPLIES" | "THERAPY_REHAB" | "LAB_DIAGNOSTICS",
   "totalAmount": number,
-  "insuranceReimbursedAmount": number,
+  "nhiCoveredAmount": number,
+  "insuranceReimbursedAmount": 0,
   "copaymentAmount": number,
   "selfPaidAmount": number,
   "isTaxDeductible": boolean,
@@ -847,9 +860,10 @@ CRITICAL RULES FOR PATIENT OUT-OF-POCKET EXPENSES VS INSURANCE:
    - The actual net amount paid by the patient at the cashier: 實收金額 / 應收金額 (e.g. 4,905).
    - In Taiwan hospital receipts, this equals: 住院部分負擔 (Copayment, e.g. 2,935) + 其他自費金額 (Self-paid, e.g. 1,970).
 
-2. Private Insurance Refund (insuranceReimbursedAmount):
-   - ALWAYS return 0 for hospital and clinic receipts!
-   - DO NOT put National Health Insurance declared points (健保申報 / 健保給付點數, e.g. 29,350) into "insuranceReimbursedAmount"!
+2. National Health Insurance Declaration (nhiCoveredAmount) vs Private Refund:
+   - "nhiCoveredAmount": Extract the total amount covered or claimed by National Health Insurance (健保申報 / 健保給付點數/金額, e.g. 29,350). This is for record-keeping only.
+   - "insuranceReimbursedAmount": ALWAYS return 0 for hospital and clinic receipts!
+   - DO NOT put National Health Insurance declared points into "insuranceReimbursedAmount"!
    - National Health Insurance is settled directly between the hospital and the government; it is NOT a cash refund or reimbursement to the patient. Putting 29,350 here causes the family accounting system to deduct $29,350 from the patient's payment, wrongly reducing the actual expense to $0!
    - You may mention the NHI declaration in "notes" (e.g. "健保給付 29,350 點，病患實付 4,905 元"), but keep "insuranceReimbursedAmount": 0!
 
@@ -921,7 +935,10 @@ CRITICAL RULES FOR PATIENT OUT-OF-POCKET EXPENSES VS INSURANCE:
                 }
 
                 if (rawResultText) {
-                  const parsed = extractJsonFromText(rawResultText);
+                  let parsed = extractJsonFromText(rawResultText);
+                  if (Array.isArray(parsed)) {
+                    parsed = parsed[0];
+                  }
                   if (parsed && (parsed.providerName || parsed.totalAmount !== undefined)) {
                     onProgress?.(100, 'Gemini AI 辨識完成！');
                     const finalTotal =
@@ -933,6 +950,7 @@ CRITICAL RULES FOR PATIENT OUT-OF-POCKET EXPENSES VS INSURANCE:
                       date: parsed.date || new Date().toISOString().split('T')[0],
                       category: parsed.category || 'HOSPITAL_CLINIC',
                       totalAmount: finalTotal,
+                      nhiCoveredAmount: Number(parsed.nhiCoveredAmount) || 0,
                       insuranceReimbursedAmount:
                         (Number(parsed.insuranceReimbursedAmount) || 0) < finalTotal
                           ? (Number(parsed.insuranceReimbursedAmount) || 0)

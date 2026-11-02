@@ -146,9 +146,13 @@ export const sanitizeExpenses = (expenses: MedicalExpense[]): MedicalExpense[] =
   if (!Array.isArray(expenses)) return [];
   return expenses.map((exp) => {
     // If an expense has insuranceReimbursedAmount >= totalAmount (e.g. NHI covered points 29,350 being stored as refund against a 4,905 bill),
-    // it was erroneously stored as a refund. Reset it to 0 so the user's actual expense is restored.
+    // it was erroneously stored as a refund. Move it into nhiCoveredAmount so the record is kept, and reset insuranceReimbursedAmount to 0!
     if (exp.insuranceReimbursedAmount && exp.insuranceReimbursedAmount >= exp.totalAmount) {
-      return { ...exp, insuranceReimbursedAmount: 0 };
+      return {
+        ...exp,
+        nhiCoveredAmount: exp.nhiCoveredAmount || exp.insuranceReimbursedAmount,
+        insuranceReimbursedAmount: 0,
+      };
     }
     return exp;
   });

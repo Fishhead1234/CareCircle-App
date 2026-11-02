@@ -51,6 +51,7 @@ export const ReceiptScannerModal: React.FC<ReceiptScannerModalProps> = ({ isOpen
   const [category, setCategory] = useState<ExpenseCategory>('HOSPITAL_CLINIC');
   const [totalAmount, setTotalAmount] = useState<string>('');
   const [insuranceReimbursedAmount, setInsuranceReimbursedAmount] = useState<string>('0');
+  const [nhiCoveredAmount, setNhiCoveredAmount] = useState<string>('0');
   const [paidByMemberId, setPaidByMemberId] = useState<string>(members[0]?.id || 'mem_sarah');
   const [paidFrom, setPaidFrom] = useState<'FUND_POOL' | 'OUT_OF_POCKET'>('FUND_POOL');
   const [isTaxDeductible, setIsTaxDeductible] = useState(true);
@@ -68,6 +69,7 @@ export const ReceiptScannerModal: React.FC<ReceiptScannerModalProps> = ({ isOpen
     category: ExpenseCategory;
     totalAmount: number;
     insuranceReimbursedAmount?: number;
+    nhiCoveredAmount?: number;
     isTaxDeductible: boolean;
     lineItems: ReceiptLineItem[];
   }) => {
@@ -83,6 +85,11 @@ export const ReceiptScannerModal: React.FC<ReceiptScannerModalProps> = ({ isOpen
       setInsuranceReimbursedAmount(res.insuranceReimbursedAmount.toFixed(2));
     } else {
       setInsuranceReimbursedAmount('0');
+    }
+    if (res.nhiCoveredAmount !== undefined && res.nhiCoveredAmount > 0) {
+      setNhiCoveredAmount(res.nhiCoveredAmount.toFixed(0));
+    } else {
+      setNhiCoveredAmount('0');
     }
     setIsTaxDeductible(res.isTaxDeductible);
     if (res.lineItems && res.lineItems.length > 0) {
@@ -258,6 +265,7 @@ export const ReceiptScannerModal: React.FC<ReceiptScannerModalProps> = ({ isOpen
       category,
       totalAmount: numericTotal,
       insuranceReimbursedAmount: safeRefund,
+      nhiCoveredAmount: parseFloat(nhiCoveredAmount) || 0,
       paidByMemberId: paidByMemberId || members[0]?.id || 'mem_sarah',
       paidFrom,
       insuranceClaimStatus:
@@ -640,26 +648,48 @@ export const ReceiptScannerModal: React.FC<ReceiptScannerModalProps> = ({ isOpen
                   placeholder="0.00"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-base font-mono font-bold text-slate-900 dark:text-white"
                 />
+                <span className="block text-[10px] text-slate-400 dark:text-slate-500 mt-1">
+                  {isZh ? '病患實收/自費金額' : 'Patient payable amount'}
+                </span>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  {t('field_ins_refund')}
+                <label className="block text-xs font-bold text-blue-700 dark:text-blue-400 mb-1">
+                  {t('field_nhi_covered')}
                 </label>
                 <input
                   type="number"
-                  step="0.01"
-                  value={insuranceReimbursedAmount}
-                  onChange={(e) => setInsuranceReimbursedAmount(e.target.value)}
-                  placeholder="0.00"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-base font-mono font-bold text-emerald-600 dark:text-emerald-400"
+                  step="1"
+                  value={nhiCoveredAmount}
+                  onChange={(e) => setNhiCoveredAmount(e.target.value)}
+                  placeholder="0"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-blue-200 dark:border-blue-800/60 bg-blue-50/40 dark:bg-blue-950/20 text-base font-mono font-bold text-blue-600 dark:text-blue-400"
                 />
-                <span className="block text-[10px] text-slate-400 dark:text-slate-500 mt-1">
+                <span className="block text-[10px] text-blue-600/80 dark:text-blue-400/80 mt-1">
                   {isZh
-                    ? '💡 僅填寫家庭已收到之商業保險理賠或長照補助款（會自總金額扣除）。收據上的「健保給付」非退款，請填 0。'
-                    : '💡 Enter actual insurance claim payouts/subsidies received. Do not enter NHI coverage points.'}
+                    ? '🏥 記錄健保給付點數（僅紀錄，不扣除自費）'
+                    : '🏥 NHI covered points (record only)'}
                 </span>
               </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                {t('field_ins_refund')}
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                value={insuranceReimbursedAmount}
+                onChange={(e) => setInsuranceReimbursedAmount(e.target.value)}
+                placeholder="0.00"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-base font-mono font-bold text-emerald-600 dark:text-emerald-400"
+              />
+              <span className="block text-[10px] text-slate-400 dark:text-slate-500 mt-1">
+                {isZh
+                  ? '💡 僅填寫家庭已收到之商業保險理賠或長照補助款（會自總金額扣除）。'
+                  : '💡 Enter actual insurance claim payouts/subsidies received (will deduct from expense).'}
+              </span>
             </div>
           </div>
 

@@ -32,6 +32,8 @@ export interface MedicalExpense {
   category: ExpenseCategory;
   totalAmount: number;
   insuranceReimbursedAmount: number;
+  /** National Health Insurance covered points or amount (健保申報 / 健保給付點數, informational only, does not deduct from totalAmount) */
+  nhiCoveredAmount?: number;
   /** Which family member paid/fronted the bill first (member.id) */
   paidByMemberId: string;
   /** Whether this bill was paid/reimbursed from the Family Fund Pool ('FUND_POOL') or is still unreimbursed out-of-pocket ('OUT_OF_POCKET') */

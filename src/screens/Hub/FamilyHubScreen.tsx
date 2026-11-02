@@ -492,6 +492,11 @@ export const FamilyHubScreen: React.FC<FamilyHubScreenProps> = ({ onOpenScanner 
                             {t('tax_deductible_badge')}
                           </span>
                         )}
+                        {exp.nhiCoveredAmount && exp.nhiCoveredAmount > 0 ? (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                            🏥 {language !== 'en' ? `健保申報 ${formatAmount(exp.nhiCoveredAmount)} 點` : `NHI ${formatAmount(exp.nhiCoveredAmount)} pts`}
+                          </span>
+                        ) : null}
                       </div>
 
                       <h4 className="font-extrabold text-sm text-slate-900 dark:text-white">
